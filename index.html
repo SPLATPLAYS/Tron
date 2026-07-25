@@ -191,6 +191,21 @@
     color: #1a1200;
     font-weight: 700;
   }
+  /* Difficulty-tier accents -- a calm-to-fierce progression, with IMPOSSIBLE breaking
+     the pattern entirely in a deep, glowing red to mark it as the outlier top tier. */
+  .seg-btn.diff-peaceful.active   { background: #6df7c9; border-color: #6df7c9; color: #04231c; }
+  .seg-btn.diff-easy.active       { background: #8fd6ff; border-color: #8fd6ff; color: #04202f; }
+  .seg-btn.diff-medium.active     { background: var(--accent); border-color: var(--accent); color: #1a1200; }
+  .seg-btn.diff-hard.active       { background: #ff9a4d; border-color: #ff9a4d; color: #2b1400; }
+  .seg-btn.diff-impossible.active,
+  .lobby-row .mini-btn.diff-impossible {
+    background: #7a0012;
+    border-color: #ff2545;
+    color: #ffd9de;
+    font-weight: 700;
+    box-shadow: 0 0 10px rgba(255, 20, 50, 0.55);
+  }
+  .seg-btn.diff-impossible:not(.active):hover { border-color: #ff2545; color: #ff8a94; }
   .stepper { display: flex; align-items: center; gap: 14px; }
   .stepper button {
     width: 34px; height: 34px;
@@ -700,6 +715,13 @@
   };
   const WIN_SCORES = [3, 5, 7, 10];
   const ROOM_SIZES = [2, 4, 6, 8];
+  const BOT_DIFFICULTY_OPTIONS = [
+    { value: 'peaceful',   label: 'PEACEFUL' },
+    { value: 'easy',       label: 'EASY' },
+    { value: 'medium',     label: 'MEDIUM' },
+    { value: 'hard',       label: 'HARD' },
+    { value: 'impossible', label: 'IMPOSSIBLE' },
+  ];
 
   const DIRS = {
     UP:    { x: 0,  y: -1 },
@@ -789,7 +811,7 @@
   }
   const localSchemes = defaultLocalSchemes();
   const localBotFlags = [false, false, false, false];
-  const localBotDifficulty = ['hard', 'hard', 'hard', 'hard'];
+  const localBotDifficulty = ['medium', 'medium', 'medium', 'medium'];
   const hostOwnScheme = { up: ['w'], down: ['s'], left: ['a'], right: ['d'], boost: ['shift'] };
   const joinOwnScheme = { up: ['w'], down: ['s'], left: ['a'], right: ['d'], boost: ['shift'] };
 
@@ -883,10 +905,12 @@
   // Reads directly off the live Simulation each tick (attached via
   // attachSim once the MatchController that owns it exists).
   // ===================================================================
+  const BOT_DIFFICULTIES = ['peaceful', 'easy', 'medium', 'hard', 'impossible'];
+
   class BotController {
     constructor(playerId, difficulty) {
       this.playerId = playerId;
-      this.difficulty = difficulty === 'easy' ? 'easy' : 'hard';
+      this.difficulty = BOT_DIFFICULTIES.includes(difficulty) ? difficulty : 'medium';
       this.sim = null;
     }
     attachSim(sim) { this.sim = sim; }
@@ -924,6 +948,19 @@
         return grid[y * cols + x] === 1;
       };
 
+      const candidates = Object.keys(DIRS).filter(d => d !== OPPOSITE[me.dir]);
+
+      // PEACEFUL: weakest tier. Mostly obeys basic self-preservation -- steers away
+      // from the immediately obvious kill -- but has no positional sense at all and
+      // occasionally just blunders into something anyway. No opponent prediction.
+      if (this.difficulty === 'peaceful') {
+        if (Math.random() < 0.12) return candidates[Math.floor(Math.random() * candidates.length)];
+        const safe = candidates.filter(d => { const np = stepFrom(me.x, me.y, d); return !isBlocked(np.x, np.y); });
+        const pool = safe.length ? safe : candidates;
+        if (pool.includes(me.dir) && Math.random() < 0.45) return me.dir;
+        return pool[Math.floor(Math.random() * pool.length)];
+      }
+
       // The trail grid only knows where players HAVE been, not where they're about to
       // go -- so two bots driving straight at each other (e.g. the top/bottom spawns
       // in a 4p match) would never see a problem until they land on the same cell on
@@ -938,38 +975,85 @@
       }
       const isContested = (x, y) => predicted.has(x + ',' + y);
 
-      const candidates = Object.keys(DIRS).filter(d => d !== OPPOSITE[me.dir]);
       const safe = candidates.filter(d => { const np = stepFrom(me.x, me.y, d); return !isBlocked(np.x, np.y); });
       const uncontested = safe.filter(d => { const np = stepFrom(me.x, me.y, d); return !isContested(np.x, np.y); });
       // prefer a move nothing else is predicted to land on; fall back to merely-safe,
       // then to any candidate at all rather than freezing.
       const pool = uncontested.length ? uncontested : (safe.length ? safe : candidates);
+      if (pool.length === 1) return pool[0];
 
-      if (this.difficulty === 'easy' || pool.length === 1) {
-        if (pool.includes(me.dir) && Math.random() < 0.7) return me.dir;
-        return pool[Math.floor(Math.random() * pool.length)];
+      // EASY & MEDIUM: flood-fill the open space reachable from each candidate move,
+      // steer toward whichever keeps the most territory open (classic Tron/Snake
+      // space-maximizing heuristic). Identical decision-making for both tiers -- EASY
+      // is simply MEDIUM with the boost meter disabled (see getBoost()).
+      if (this.difficulty === 'easy' || this.difficulty === 'medium') {
+        let bestScore = -1;
+        const scored = pool.map(d => {
+          const np = stepFrom(me.x, me.y, d);
+          const score = this._floodFill(np.x, np.y, grid, cols, rows, wallMode);
+          if (score > bestScore) bestScore = score;
+          return { d, score };
+        });
+        const nearBest = scored.filter(s => s.score >= bestScore * 0.9);
+        if (nearBest.some(s => s.d === me.dir)) return me.dir;
+        return nearBest[Math.floor(Math.random() * nearBest.length)].d;
       }
 
-      // hard: flood-fill the open space reachable from each candidate move,
-      // steer toward whichever keeps the most territory open (classic
-      // Tron/Snake space-maximizing heuristic).
-      let bestScore = -1;
+      // HARD & IMPOSSIBLE: territory control. Instead of just measuring how much open
+      // space is nearby, it runs a multi-source flood-fill (a "Voronoi" race) from
+      // everyone's position at once, so a cell only counts for whoever would actually
+      // reach it first. Score = my claimed cells minus my toughest rival's claimed
+      // cells -- this is what lets it actively cut opponents off rather than just
+      // avoiding them.
       const scored = pool.map(d => {
         const np = stepFrom(me.x, me.y, d);
-        const score = this._floodFill(np.x, np.y, grid, cols, rows, wallMode);
-        if (score > bestScore) bestScore = score;
-        return { d, score };
+        return { d, score: this._territoryScore(np, me, sim, grid, cols, rows, wallMode) };
       });
-      const nearBest = scored.filter(s => s.score >= bestScore * 0.9);
-      if (nearBest.some(s => s.d === me.dir)) return me.dir;
-      return nearBest[Math.floor(Math.random() * nearBest.length)].d;
+      scored.sort((a, b) => b.score - a.score);
+      const bestScore = scored[0].score;
+
+      if (this.difficulty === 'hard') {
+        // "Takes angles": defaults to the strictly best territory move (scored[0]), and
+        // only accepts a turning alternative when it costs next to nothing -- a small
+        // margin scaled off the score itself, not a flat number that becomes noise on a
+        // big open board. This is what keeps it from trading away a real safety edge
+        // just to zig-zag.
+        const margin = Math.max(2, Math.round(Math.abs(bestScore) * 0.08));
+        const nearBest = scored.filter(s => s.score >= bestScore - margin);
+        const turning = nearBest.filter(s => s.d !== me.dir);
+        if (turning.length && Math.random() < 0.4) {
+          return turning[Math.floor(Math.random() * turning.length)].d;
+        }
+        return scored[0].d;
+      }
+
+      // IMPOSSIBLE: looks one more move deeper on every remaining candidate --
+      // checking it isn't walking into a dead end that only reveals itself a tick
+      // later -- then commits to whichever holds up best under that scrutiny. No
+      // randomness; always takes the strongest option it can find.
+      let best = scored[0], bestAdjusted = -Infinity;
+      for (const cand of scored) {
+        const np = stepFrom(me.x, me.y, cand.d);
+        const lookahead = this._lookaheadScore(np, me, sim, cols, rows, wallMode);
+        if (lookahead > bestAdjusted) { bestAdjusted = lookahead; best = cand; }
+      }
+      return best.d;
     }
     getBoost() {
       const sim = this.sim;
-      if (!sim || this.difficulty !== 'hard') return false;
+      if (!sim) return false;
+      if (this.difficulty === 'peaceful' || this.difficulty === 'easy') return false;
       const me = sim.players.find(p => p.id === this.playerId);
       if (!me || !me.alive || me.boostsLeft <= 0 || me.boostTicks > 0) return false;
-      return Math.random() < 0.02; // sparing, occasional use -- not every tick
+      if (this.difficulty === 'medium') return Math.random() < 0.02; // sparing, occasional use
+      if (this.difficulty === 'hard') return Math.random() < 0.045;
+      // IMPOSSIBLE: burns boosts with intent -- to blast out of a tightening pocket, or
+      // simply to press an advantage more often than the lower tiers bother to.
+      const { cols, rows, wallMode } = sim.settings;
+      const grid = BotController._grid(sim);
+      const openAhead = this._floodFill(me.x, me.y, grid, cols, rows, wallMode);
+      if (openAhead < 6) return true;
+      return Math.random() < 0.09;
     }
     _floodFill(sx, sy, grid, cols, rows, wallMode) {
       const cap = 400; // perf cap -- enough to reliably tell open regions apart, cheap even with many bots
@@ -996,6 +1080,92 @@
         }
       }
       return count;
+    }
+    // Multi-source BFS "Voronoi" race from my hypothetical next cell and every other
+    // alive player's current cell, run simultaneously. Each empty cell is claimed by
+    // whoever reaches it first; equidistant cells are contested and belong to no one.
+    // Returns (my claimed cells) - (my toughest rival's claimed cells) -- rewards
+    // moves that grow my share of the remaining board *relative to opponents*, not
+    // just moves that happen to have open space nearby.
+    _territoryScore(myPos, me, sim, grid, cols, rows, wallMode) {
+      const idx = (x, y) => y * cols + x;
+      if (wallMode !== 'wrap' && (myPos.x < 0 || myPos.x >= cols || myPos.y < 0 || myPos.y >= rows)) return -Infinity;
+      if (grid[idx(myPos.x, myPos.y)] === 1) return -Infinity;
+
+      const size = cols * rows;
+      const owner = new Int16Array(size).fill(-1); // -1 = unclaimed, -2 = contested, 0 = me, >0 = opponent id
+      const dist = new Int16Array(size).fill(-1);
+      const queue = new Int32Array(size);
+      let qTail = 0;
+
+      const seed = (x, y, ownerId) => {
+        if (wallMode !== 'wrap' && (x < 0 || x >= cols || y < 0 || y >= rows)) return;
+        const i = idx(x, y);
+        // Every player's own head cell is already marked occupied in the trail grid
+        // (it's part of their trail) -- that's fine and expected here, it's still a
+        // valid starting point for their reachable-space race. Only skip if something
+        // has already claimed this exact cell as a seed.
+        if (dist[i] !== -1) return;
+        owner[i] = ownerId; dist[i] = 0;
+        queue[qTail++] = i;
+      };
+
+      seed(myPos.x, myPos.y, 0);
+      let nextOpp = 1;
+      for (const p of sim.players) {
+        if (p.id === me.id || !p.alive) continue;
+        seed(p.x, p.y, nextOpp);
+        nextOpp++;
+      }
+
+      let qHead = 0;
+      while (qHead < qTail) {
+        const i = queue[qHead++];
+        const x = i % cols, y = (i - x) / cols;
+        const d = dist[i], o = owner[i];
+        const nb = [x + 1, y, x - 1, y, x, y + 1, x, y - 1];
+        for (let k = 0; k < 8; k += 2) {
+          let nx = nb[k], ny = nb[k + 1];
+          if (wallMode === 'wrap') { nx = (nx + cols) % cols; ny = (ny + rows) % rows; }
+          else if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+          const ni = idx(nx, ny);
+          if (grid[ni] === 1) continue;
+          if (dist[ni] === -1) {
+            owner[ni] = o; dist[ni] = d + 1;
+            queue[qTail++] = ni;
+          } else if (dist[ni] === d + 1 && owner[ni] !== o && owner[ni] !== -2) {
+            owner[ni] = -2;
+          }
+        }
+      }
+
+      let myCount = 0;
+      const oppCounts = new Map();
+      for (let i = 0; i < size; i++) {
+        const o = owner[i];
+        if (o === 0) myCount++;
+        else if (o > 0) oppCounts.set(o, (oppCounts.get(o) || 0) + 1);
+      }
+      let worstOpp = 0;
+      for (const c of oppCounts.values()) worstOpp = Math.max(worstOpp, c);
+      return myCount - worstOpp;
+    }
+    // One extra ply for IMPOSSIBLE: from a hypothetical position, what's the best
+    // territory score still reachable next move? Catches "looked fine this tick, dead
+    // end next tick" traps that plain territory scoring can't see coming.
+    _lookaheadScore(pos, me, sim, cols, rows, wallMode) {
+      const grid = BotController._grid(sim);
+      let best = -Infinity;
+      for (const d of Object.keys(DIRS)) {
+        const dd = DIRS[d];
+        let nx = pos.x + dd.x, ny = pos.y + dd.y;
+        if (wallMode === 'wrap') { nx = (nx + cols) % cols; ny = (ny + rows) % rows; }
+        else if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+        if (grid[ny * cols + nx] === 1) continue;
+        const score = this._territoryScore({ x: nx, y: ny }, me, sim, grid, cols, rows, wallMode);
+        if (score > best) best = score;
+      }
+      return best === -Infinity ? -9999 : best;
     }
   }
 
@@ -1397,7 +1567,7 @@
   let hostState = null;   // host-side room state
   let guestState = null;  // guest-side room state
   let hostConn = null;    // guest's connection to the host
-  let hostNextBotDifficulty = 'hard';
+  let hostNextBotDifficulty = 'medium';
   let activeMatch = null;
   let clientView = null;
   let activeControllers = []; // KeyboardControllers created for the current match, cleaned up on leave/restart
@@ -1512,7 +1682,7 @@
       $('lobbyReady').style.display = 'none';
       $('lobbyStart').style.display = 'inline-block';
       $('hostBotField').style.display = 'block';
-      makeSegmented($('hostBotDifficulty'), [{ value: 'easy', label: 'EASY' }, { value: 'hard', label: 'HARD' }], hostNextBotDifficulty, v => hostNextBotDifficulty = v);
+      makeSegmented($('hostBotDifficulty'), BOT_DIFFICULTY_OPTIONS, hostNextBotDifficulty, v => hostNextBotDifficulty = v);
       switchScreen('lobby');
       renderLobbyHost();
     });
@@ -1587,14 +1757,17 @@
   function hostCycleBotDifficulty(id) {
     if (!hostState) return;
     const r = hostState.roster.find(r => r.id === id);
-    if (r) { r.difficulty = r.difficulty === 'hard' ? 'easy' : 'hard'; renderLobbyHost(); }
+    if (!r) return;
+    const idx = BOT_DIFFICULTY_OPTIONS.findIndex(o => o.value === r.difficulty);
+    r.difficulty = BOT_DIFFICULTY_OPTIONS[(idx + 1) % BOT_DIFFICULTY_OPTIONS.length].value;
+    renderLobbyHost();
   }
   function renderLobbyHost() {
     const list = $('lobbyList'); list.innerHTML = '';
     hostState.roster.forEach(r => {
       const row = document.createElement('div'); row.className = 'lobby-row';
       const right = r.isBot
-        ? '<button type="button" class="mini-btn" data-bot-diff="' + r.id + '">' + r.difficulty.toUpperCase() + '</button>' +
+        ? '<button type="button" class="mini-btn diff-' + r.difficulty + '" data-bot-diff="' + r.id + '">' + r.difficulty.toUpperCase() + '</button>' +
           '<button type="button" class="mini-btn danger" data-bot-remove="' + r.id + '">REMOVE</button>'
         : '<span class="ready-pip ' + (r.isHost || r.ready ? 'yes' : 'no') + '">' + (r.isHost ? 'HOST' : (r.ready ? 'READY' : 'WAITING')) + '</span>';
       row.innerHTML = '<span class="dot" style="background:' + r.color + ';box-shadow:0 0 6px ' + r.color + '"></span>' +
@@ -1756,7 +1929,7 @@
     const state = { value: current };
     options.forEach(opt => {
       const btn = document.createElement('button');
-      btn.className = 'seg-btn' + (opt.value === current ? ' active' : '');
+      btn.className = 'seg-btn diff-' + opt.value + (opt.value === current ? ' active' : '');
       btn.textContent = opt.label;
       btn.type = 'button';
       btn.addEventListener('click', () => {
@@ -1831,12 +2004,12 @@
 
       if (localBotFlags[i]) {
         const diffWrap = document.createElement('div'); diffWrap.className = 'segmented';
-        ['easy', 'hard'].forEach(diff => {
+        BOT_DIFFICULTY_OPTIONS.forEach(opt => {
           const btn = document.createElement('button');
           btn.type = 'button';
-          btn.className = 'seg-btn' + (localBotDifficulty[i] === diff ? ' active' : '');
-          btn.textContent = diff.toUpperCase();
-          btn.addEventListener('click', () => { localBotDifficulty[i] = diff; renderLocalControls(); });
+          btn.className = 'seg-btn diff-' + opt.value + (localBotDifficulty[i] === opt.value ? ' active' : '');
+          btn.textContent = opt.label;
+          btn.addEventListener('click', () => { localBotDifficulty[i] = opt.value; renderLocalControls(); });
           diffWrap.appendChild(btn);
         });
         block.appendChild(diffWrap);
