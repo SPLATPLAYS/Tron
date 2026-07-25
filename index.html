@@ -368,6 +368,9 @@
   .p-chip .p-name { color: var(--text-dim); max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .p-chip .p-score { font-weight: 800; }
   .p-chip .p-team { font-size: 9px; color: var(--text-dim); border: 1px solid var(--panel-border); border-radius: 4px; padding: 1px 4px; }
+  .p-chip .p-boost { display: flex; gap: 3px; margin-left: 1px; }
+  .p-chip .p-boost span { width: 6px; height: 6px; border-radius: 50%; background: var(--pc); opacity: 0.22; transition: opacity 0.15s; }
+  .p-chip .p-boost span.filled { opacity: 1; box-shadow: 0 0 5px var(--pc); }
 
   #hudCenter {
     font-family: 'Orbitron', sans-serif;
@@ -706,6 +709,8 @@
   };
   const OPPOSITE = { UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT' };
   const COUNTDOWN_TICKS = 3;
+  const BOOST_MAX = 3;    // boost charges per round
+  const BOOST_TICKS = 8;  // ticks a single boost's speed burst lasts
 
   // ===================================================================
   // SMALL HELPERS
@@ -727,6 +732,11 @@
     let s = '';
     for (let i = 0; i < 5; i++) s += chars[Math.floor(Math.random() * chars.length)];
     return 'TRON-' + s;
+  }
+  function darkenHex(hex, amt) {
+    const n = parseInt(hex.replace('#', ''), 16);
+    const r = Math.max(0, (n >> 16) - amt), g = Math.max(0, ((n >> 8) & 0xff) - amt), b = Math.max(0, (n & 0xff) - amt);
+    return '#' + (0x1000000 + r * 0x10000 + g * 0x100 + b).toString(16).slice(1);
   }
   function formatKey(k) {
     const map = { arrowup: '\u2191', arrowdown: '\u2193', arrowleft: '\u2190', arrowright: '\u2192', ' ': 'SPACE' };
@@ -771,21 +781,21 @@
   // ===================================================================
   function defaultLocalSchemes() {
     return [
-      { up: ['w'], down: ['s'], left: ['a'], right: ['d'] },
-      { up: ['arrowup'], down: ['arrowdown'], left: ['arrowleft'], right: ['arrowright'] },
-      { up: ['i'], down: ['k'], left: ['j'], right: ['l'] },
-      { up: ['t'], down: ['g'], left: ['f'], right: ['h'] },
+      { up: ['w'], down: ['s'], left: ['a'], right: ['d'], boost: ['shift'] },
+      { up: ['arrowup'], down: ['arrowdown'], left: ['arrowleft'], right: ['arrowright'], boost: ['enter'] },
+      { up: ['i'], down: ['k'], left: ['j'], right: ['l'], boost: ['m'] },
+      { up: ['t'], down: ['g'], left: ['f'], right: ['h'], boost: ['v'] },
     ];
   }
   const localSchemes = defaultLocalSchemes();
   const localBotFlags = [false, false, false, false];
   const localBotDifficulty = ['hard', 'hard', 'hard', 'hard'];
-  const hostOwnScheme = { up: ['w'], down: ['s'], left: ['a'], right: ['d'] };
-  const joinOwnScheme = { up: ['w'], down: ['s'], left: ['a'], right: ['d'] };
+  const hostOwnScheme = { up: ['w'], down: ['s'], left: ['a'], right: ['d'], boost: ['shift'] };
+  const joinOwnScheme = { up: ['w'], down: ['s'], left: ['a'], right: ['d'], boost: ['shift'] };
 
   function renderControlEditor(container, scheme, conflictCheck, onChange) {
     container.innerHTML = '';
-    ['up', 'down', 'left', 'right'].forEach(dir => {
+    ['up', 'down', 'left', 'right', 'boost'].forEach(dir => {
       const row = document.createElement('div');
       row.className = 'key-row';
       const label = document.createElement('span');
@@ -826,13 +836,15 @@
     constructor(scheme) {
       this.scheme = scheme;
       this.pending = null;
+      this.boostPending = false;
       this.active = true;
       this._handler = (e) => {
         if (!this.active) return;
         const k = e.key.toLowerCase();
         for (const dir of Object.keys(this.scheme)) {
           if (this.scheme[dir].includes(k)) {
-            this.pending = dir.toUpperCase();
+            if (dir === 'boost') this.boostPending = true;
+            else this.pending = dir.toUpperCase();
             if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
           }
         }
@@ -840,20 +852,23 @@
       window.addEventListener('keydown', this._handler);
     }
     getIntent() { const v = this.pending; this.pending = null; return v; }
+    getBoost() { const v = this.boostPending; this.boostPending = false; return v; }
     destroy() { this.active = false; window.removeEventListener('keydown', this._handler); }
   }
 
   class NetworkSendController {
-    constructor(scheme, sendFn) {
+    constructor(scheme, onDir, onBoost) {
       this.scheme = scheme;
-      this.sendFn = sendFn;
+      this.onDir = onDir;
+      this.onBoost = onBoost;
       this.active = false;
       window.addEventListener('keydown', (e) => {
         if (!this.active) return;
         const k = e.key.toLowerCase();
         for (const dir of Object.keys(this.scheme)) {
           if (this.scheme[dir].includes(k)) {
-            this.sendFn(dir.toUpperCase());
+            if (dir === 'boost') { if (this.onBoost) this.onBoost(); }
+            else this.onDir(dir.toUpperCase());
             if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
           }
         }
@@ -949,6 +964,13 @@
       if (nearBest.some(s => s.d === me.dir)) return me.dir;
       return nearBest[Math.floor(Math.random() * nearBest.length)].d;
     }
+    getBoost() {
+      const sim = this.sim;
+      if (!sim || this.difficulty !== 'hard') return false;
+      const me = sim.players.find(p => p.id === this.playerId);
+      if (!me || !me.alive || me.boostsLeft <= 0 || me.boostTicks > 0) return false;
+      return Math.random() < 0.02; // sparing, occasional use -- not every tick
+    }
     _floodFill(sx, sy, grid, cols, rows, wallMode) {
       const cap = 400; // perf cap -- enough to reliably tell open regions apart, cheap even with many bots
       const idx = (x, y) => y * cols + x;
@@ -984,11 +1006,19 @@
     constructor(id, color, x, y, dir, team, name) {
       this.id = id; this.color = color; this.team = team; this.name = name;
       this.x = x; this.y = y; this.dir = dir;
-      this.trail = [{ x, y }];
+      this.trail = [{ x, y, boost: false }];
       this.occupied = new Set([x + ',' + y]);
       this.alive = true;
+      this.boostsLeft = BOOST_MAX;
+      this.boostTicks = 0;      // ticks remaining of an active speed burst
+      this.addedThisTick = [];  // segments laid down on the current tick (for network sync)
     }
-    markOccupied(x, y) { this.trail.push({ x, y }); this.occupied.add(x + ',' + y); }
+    markOccupied(x, y, boost) {
+      const seg = { x, y, boost: !!boost };
+      this.trail.push(seg);
+      this.occupied.add(x + ',' + y);
+      this.addedThisTick.push(seg);
+    }
   }
 
   class Simulation {
@@ -1007,39 +1037,56 @@
       if (OPPOSITE[p.dir] === intent) return;
       if (DIRS[intent]) p.dir = intent;
     }
-    step(intents) {
-      if (this.over) return;
-      for (const p of this.players) if (p.alive) this.applyIntent(p, intents[p.id]);
-
+    // Moves every alive player in `subset` (default: everyone alive) forward one cell,
+    // resolving wall/trail/head-on collisions. Called twice in a tick for players who
+    // are currently boosting, so they cover two cells while everyone else covers one.
+    _movePhase(subset) {
+      const list = (subset || this.players).filter(p => p.alive);
+      if (!list.length) return;
       const { cols, rows, wallMode } = this.settings;
       const nextPos = {};
-      for (const p of this.players) {
-        if (!p.alive) continue;
+      for (const p of list) {
         const d = DIRS[p.dir];
         let nx = p.x + d.x, ny = p.y + d.y;
         if (wallMode === 'wrap') { nx = (nx + cols) % cols; ny = (ny + rows) % rows; }
         nextPos[p.id] = { x: nx, y: ny };
       }
-
       const deaths = new Set();
       const headCells = {};
-      for (const p of this.players) {
-        if (!p.alive) continue;
+      for (const p of list) {
         const np = nextPos[p.id];
         const key = np.x + ',' + np.y;
         const hitsWall = wallMode !== 'wrap' && (np.x < 0 || np.x >= cols || np.y < 0 || np.y >= rows);
         let hitsTrail = false;
-        for (const other of this.players) { if (other.occupied.has(key)) { hitsTrail = true; break; } }
+        for (const other of this.players) { if (other.alive && other.occupied.has(key)) { hitsTrail = true; break; } }
         if (hitsWall || hitsTrail) deaths.add(p.id);
         (headCells[key] = headCells[key] || []).push(p.id);
       }
       for (const key in headCells) if (headCells[key].length > 1) headCells[key].forEach(id => deaths.add(id));
-
-      for (const p of this.players) {
-        if (!p.alive) continue;
+      for (const p of list) {
         if (deaths.has(p.id)) { p.alive = false; }
-        else { const np = nextPos[p.id]; p.x = np.x; p.y = np.y; p.markOccupied(np.x, np.y); }
+        else { const np = nextPos[p.id]; p.x = np.x; p.y = np.y; p.markOccupied(np.x, np.y, p.boostTicks > 0); }
       }
+    }
+    step(intents, boostRequests) {
+      if (this.over) return;
+      for (const p of this.players) if (p.alive) this.applyIntent(p, intents[p.id]);
+      for (const p of this.players) p.addedThisTick = [];
+
+      if (boostRequests) {
+        for (const p of this.players) {
+          if (!p.alive) continue;
+          if (boostRequests[p.id] && p.boostsLeft > 0 && p.boostTicks <= 0) {
+            p.boostTicks = BOOST_TICKS;
+            p.boostsLeft--;
+          }
+        }
+      }
+
+      this._movePhase(); // every alive player covers one cell
+      const boosters = this.players.filter(p => p.alive && p.boostTicks > 0);
+      if (boosters.length) this._movePhase(boosters); // boosted players cover a second cell
+      for (const p of this.players) if (p.boostTicks > 0) p.boostTicks--;
 
       if (this.settings.teams) {
         const aliveTeams = new Set(this.players.filter(p => p.alive).map(p => p.team));
@@ -1077,13 +1124,17 @@
         ctx.beginPath(); ctx.moveTo(0, y * cs + 0.5); ctx.lineTo(this.canvas.width, y * cs + 0.5); ctx.stroke();
       }
       for (const p of view.players) {
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = 0.85;
-        for (const seg of p.trail) ctx.fillRect(seg.x * cs + 1, seg.y * cs + 1, cs - 2, cs - 2);
+        const dark = darkenHex(p.color, 90);
+        for (const seg of p.trail) {
+          if (seg.boost) { ctx.fillStyle = dark; ctx.globalAlpha = 0.4; }
+          else { ctx.fillStyle = p.color; ctx.globalAlpha = 0.85; }
+          ctx.fillRect(seg.x * cs + 1, seg.y * cs + 1, cs - 2, cs - 2);
+        }
         ctx.globalAlpha = 1;
         if (p.alive) {
+          const boosting = p.boostTicks > 0 || p.boosting;
           ctx.save();
-          ctx.shadowColor = p.color; ctx.shadowBlur = 14;
+          ctx.shadowColor = p.color; ctx.shadowBlur = boosting ? 22 : 14;
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(p.x * cs + 1, p.y * cs + 1, cs - 2, cs - 2);
           ctx.restore();
@@ -1116,11 +1167,17 @@
         '<span class="p-dot"></span>' +
         '<span class="p-name">' + escapeHtml(r.name) + '</span>' +
         '<span class="p-score" id="score-' + r.id + '">0</span>' +
+        '<span class="p-boost" id="boost-' + r.id + '">' + '<span class="filled"></span>'.repeat(BOOST_MAX) + '</span>' +
         (r.team ? '<span class="p-team">' + r.team + '</span>' : '');
       hud.appendChild(chip);
     });
   }
   function updateScoreChip(id, val) { const el = $('score-' + id); if (el) el.textContent = val; }
+  function updateBoostChip(id, left) {
+    const el = $('boost-' + id);
+    if (!el) return;
+    [...el.children].forEach((dot, i) => dot.classList.toggle('filled', i < left));
+  }
   function showOverlay() { $('overlay').style.display = 'flex'; }
   function hideOverlay() { $('overlay').style.display = 'none'; }
   function setOverlayText(big, small, hint, color) {
@@ -1169,6 +1226,7 @@
     stop() { this.running = false; }
     beginCountdown() {
       this.sim.reset();
+      this.roster.forEach(r => updateBoostChip(r.id, BOOST_MAX));
       this.phase = 'countdown';
       this.countdownVal = COUNTDOWN_TICKS;
       this.countdownTimer = this.countdownStepMs;
@@ -1225,7 +1283,11 @@
       if (!this.onBroadcast) return;
       this.onBroadcast({
         type: 'frame',
-        players: this.sim.players.map(p => ({ id: p.id, x: p.x, y: p.y, alive: p.alive })),
+        players: this.sim.players.map(p => ({
+          id: p.id, x: p.x, y: p.y, alive: p.alive,
+          boosting: p.boostTicks > 0, boostsLeft: p.boostsLeft,
+          newSegs: p.addedThisTick,
+        })),
       });
     }
     broadcastPhase() {
@@ -1241,7 +1303,7 @@
         if (this.countdownVal < 0) {
           this.phase = 'playing';
           hideOverlay();
-          this.roster.forEach(r => this.slots[r.id].getIntent());
+          this.roster.forEach(r => { const s = this.slots[r.id]; s.getIntent(); if (s.getBoost) s.getBoost(); });
         } else {
           setOverlayText(this.countdownVal > 0 ? String(this.countdownVal) : 'GO', 'get ready', '');
         }
@@ -1249,9 +1311,14 @@
         return;
       }
       if (this.phase === 'playing') {
-        const intents = {};
-        this.roster.forEach(r => { intents[r.id] = this.slots[r.id].getIntent(); });
-        this.sim.step(intents);
+        const intents = {}, boosts = {};
+        this.roster.forEach(r => {
+          const slot = this.slots[r.id];
+          intents[r.id] = slot.getIntent();
+          boosts[r.id] = slot.getBoost ? slot.getBoost() : false;
+        });
+        this.sim.step(intents, boosts);
+        this.sim.players.forEach(p => updateBoostChip(p.id, p.boostsLeft));
         this.broadcastFrame();
         if (this.sim.over) this.endRound();
         return;
@@ -1280,7 +1347,7 @@
     constructor(roster, settings) {
       this.roster = roster;
       this.settings = settings;
-      this.players = roster.map(r => ({ id: r.id, color: r.color, x: -10, y: -10, alive: true, trail: [] }));
+      this.players = roster.map(r => ({ id: r.id, color: r.color, x: -10, y: -10, alive: true, trail: [], boosting: false }));
       this.byId = {}; this.players.forEach(p => this.byId[p.id] = p);
       this.score = {}; roster.forEach(r => this.score[r.id] = 0);
       renderRoster(roster);
@@ -1291,13 +1358,18 @@
       for (const pd of msg.players) {
         const vp = this.byId[pd.id];
         if (!vp) continue;
-        vp.x = pd.x; vp.y = pd.y; vp.alive = pd.alive;
-        if (pd.alive) vp.trail.push({ x: pd.x, y: pd.y });
+        vp.x = pd.x; vp.y = pd.y; vp.alive = pd.alive; vp.boosting = !!pd.boosting;
+        if (pd.alive) {
+          if (pd.newSegs && pd.newSegs.length) pd.newSegs.forEach(seg => vp.trail.push(seg));
+          else vp.trail.push({ x: pd.x, y: pd.y, boost: false });
+        }
+        if (typeof pd.boostsLeft === 'number') updateBoostChip(pd.id, pd.boostsLeft);
       }
     }
     onPhase(msg) {
       if (msg.phase === 'countdown') {
-        this.players.forEach(p => { p.trail = []; p.alive = true; });
+        this.players.forEach(p => { p.trail = []; p.alive = true; p.boosting = false; });
+        this.roster.forEach(r => updateBoostChip(r.id, BOOST_MAX));
         showOverlay();
         setOverlayText(msg.countdownVal > 0 ? String(msg.countdownVal) : 'GO', 'get ready', '');
       } else if (msg.phase === 'playing') {
@@ -1330,7 +1402,9 @@
   let clientView = null;
   let activeControllers = []; // KeyboardControllers created for the current match, cleaned up on leave/restart
   function destroyActiveControllers() { activeControllers.forEach(c => c.destroy()); activeControllers = []; }
-  const guestSendController = new NetworkSendController(joinOwnScheme, dir => { if (hostConn && hostConn.open) hostConn.send({ type: 'input', dir }); });
+  const guestSendController = new NetworkSendController(joinOwnScheme,
+    dir => { if (hostConn && hostConn.open) hostConn.send({ type: 'input', dir }); },
+    () => { if (hostConn && hostConn.open) hostConn.send({ type: 'boost' }); });
 
   function peerAvailable() { return typeof Peer !== 'undefined'; }
 
@@ -1464,6 +1538,9 @@
     if (data.type === 'input') {
       const slot = hostState.remoteSlots && hostState.remoteSlots[pid];
       if (slot) slot.pending = data.dir;
+    } else if (data.type === 'boost') {
+      const slot = hostState.remoteSlots && hostState.remoteSlots[pid];
+      if (slot) slot.boostPending = true;
     } else if (data.type === 'ready') {
       const r = hostState.roster.find(r => r.id === pid);
       if (r) { r.ready = !!data.ready; broadcastLobby(); renderLobbyHost(); }
@@ -1545,7 +1622,11 @@
       if (r.isHost) { slots[r.id] = localController; }
       else if (r.isBot) { slots[r.id] = new BotController(r.id, r.difficulty); }
       else {
-        const remote = { pending: null, getIntent() { const v = this.pending; this.pending = null; return v; } };
+        const remote = {
+          pending: null, boostPending: false,
+          getIntent() { const v = this.pending; this.pending = null; return v; },
+          getBoost() { const v = this.boostPending; this.boostPending = false; return v; },
+        };
         hostState.remoteSlots[r.id] = remote;
         slots[r.id] = remote;
       }
@@ -1765,7 +1846,7 @@
         renderControlEditor(editor, localSchemes[i], (dir, key) => {
           for (let j = 0; j < localUi.count; j++) {
             if (localBotFlags[j]) continue;
-            for (const d of ['up', 'down', 'left', 'right']) {
+            for (const d of ['up', 'down', 'left', 'right', 'boost']) {
               if (j === i && d === dir) continue;
               if (localSchemes[j][d][0] === key) return true;
             }
@@ -1796,7 +1877,8 @@
         const kc = new KeyboardController(localSchemes[i]);
         activeControllers.push(kc);
         slots[id] = kc;
-        controlsStripParts.push('P' + (i + 1) + ': ' + Object.keys(localSchemes[i]).map(d => formatKey(localSchemes[i][d][0])).join(''));
+        const dirLabel = ['up', 'down', 'left', 'right'].map(d => formatKey(localSchemes[i][d][0])).join('');
+        controlsStripParts.push('P' + (i + 1) + ': ' + dirLabel + ' \u00b7 boost:' + formatKey(localSchemes[i].boost[0]));
       }
     }
     switchScreen('game');
@@ -1815,7 +1897,7 @@
     makeSegmented($('hostWinScore'), scoreOptions(), hostUi.winScore, v => hostUi.winScore = v);
     makeSegmented($('hostWallMode'), wallOptions(), hostUi.wallMode, v => hostUi.wallMode = v);
     renderControlEditor($('hostControlsEditor'), hostOwnScheme, (dir, key) => {
-      for (const d of ['up', 'down', 'left', 'right']) { if (d !== dir && hostOwnScheme[d][0] === key) return true; }
+      for (const d of ['up', 'down', 'left', 'right', 'boost']) { if (d !== dir && hostOwnScheme[d][0] === key) return true; }
       return false;
     }, () => {});
   }
@@ -1825,7 +1907,7 @@
   // ---- JOIN SETUP ----
   function initJoinSetup() {
     renderControlEditor($('joinControlsEditor'), joinOwnScheme, (dir, key) => {
-      for (const d of ['up', 'down', 'left', 'right']) { if (d !== dir && joinOwnScheme[d][0] === key) return true; }
+      for (const d of ['up', 'down', 'left', 'right', 'boost']) { if (d !== dir && joinOwnScheme[d][0] === key) return true; }
       return false;
     }, () => {});
   }
