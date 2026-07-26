@@ -356,6 +356,7 @@
   }
   .lobby-row .mini-btn:hover { border-color: var(--accent-2); color: var(--text); }
   .lobby-row .mini-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+  .lobby-row .mini-btn.inf-toggle.on { color: #1a1200; background: var(--accent); border-color: var(--accent); }
 
   /* ---------- Game ---------- */
   #gameScreenInner { display: flex; flex-direction: column; align-items: center; gap: 14px; }
@@ -550,6 +551,12 @@
         <div class="field-label">Walls</div>
         <div class="segmented" id="localWallMode"></div>
       </div>
+      <div class="field">
+        <div class="toggle-row">
+          <div class="field-label">Infinite Boosts (set all)</div>
+          <div class="toggle" id="localInfiniteBoostsToggle"><div class="knob"></div></div>
+        </div>
+      </div>
 
       <div class="field">
         <div class="field-label">Controls</div>
@@ -614,6 +621,12 @@
         <div class="segmented" id="hostWallMode"></div>
       </div>
       <div class="field">
+        <div class="toggle-row">
+          <div class="field-label">Infinite Boosts (starting default)</div>
+          <div class="toggle" id="hostInfiniteBoostsToggle"><div class="knob"></div></div>
+        </div>
+      </div>
+      <div class="field">
         <div class="field-label">Your Controls</div>
         <div id="hostControlsEditor" class="controls-editor"></div>
       </div>
@@ -675,6 +688,12 @@
         <button class="btn ghost" id="lobbyCopy">Copy</button>
       </div>
       <div class="lobby-list" id="lobbyList"></div>
+      <div class="field" id="hostInfiniteField" style="display:none;">
+        <div class="toggle-row">
+          <div class="field-label">Infinite Boosts (set all)</div>
+          <div class="toggle" id="lobbyInfiniteToggle"><div class="knob"></div></div>
+        </div>
+      </div>
       <div class="field" id="hostBotField" style="display:none;">
         <div class="field-label">Add Bot</div>
         <div class="btn-row" style="justify-content:flex-start;">
@@ -842,6 +861,7 @@
   const localSchemes = defaultLocalSchemes();
   const localBotFlags = [false, false, false, false];
   const localBotDifficulty = ['medium', 'medium', 'medium', 'medium'];
+  const localInfiniteBoostFlags = [false, false, false, false];
   const hostOwnScheme = { up: ['w'], down: ['s'], left: ['a'], right: ['d'], boost: ['shift'] };
   const joinOwnScheme = { up: ['w'], down: ['s'], left: ['a'], right: ['d'], boost: ['shift'] };
 
@@ -1023,12 +1043,25 @@
       // straight) and treat it as contested, so bots swerve a tick early instead of
       // colliding head-on. An opponent who's mid-boost covers two cells this tick too,
       // so project both when that's the case.
+      //
+      // Gotcha: boostTicks only gets set inside sim.step(), which runs AFTER every
+      // slot's getIntent()/getBoost() has already been read for this tick (see
+      // MatchController._tick). So an opponent pressing boost for the very first
+      // tick of a fresh boost still reads boostTicks === 0 right now -- identical to
+      // someone with no boost queued at all -- and the two-cell projection below
+      // would silently miss them. That's exactly the case where a boosting player
+      // crosses in front of the bot and it doesn't react in time. IMPOSSIBLE can't
+      // read anyone's queued input, so it has to assume anyone still able to boost
+      // (charge left, not already mid-boost) might be about to, and project the
+      // second cell defensively too -- not just opponents already confirmed boosting.
       const predicted = new Set();
       for (const other of sim.players) {
         if (other.id === this.playerId || !other.alive) continue;
         const np = stepFrom(other.x, other.y, other.dir);
         predicted.add(np.x + ',' + np.y);
-        if (other.boostTicks > 0) {
+        const mayDoubleStep = other.boostTicks > 0 ||
+          (this.difficulty === 'impossible' && other.boostsLeft > 0 && other.boostTicks <= 0);
+        if (mayDoubleStep) {
           const np2 = stepFrom(np.x, np.y, other.dir);
           predicted.add(np2.x + ',' + np2.y);
         }
@@ -1181,15 +1214,32 @@
     // Returns (my claimed cells) - (my toughest rival's claimed cells) -- rewards
     // moves that grow my share of the remaining board *relative to opponents*, not
     // just moves that happen to have open space nearby.
+    // IMPOSSIBLE calls this at every leaf of its lookahead tree -- potentially
+    // hundreds of times per bot per tick -- so allocating three fresh typed arrays
+    // (plus a Map) on every call was generating enough garbage to noticeably stall
+    // the tab. Reuse one scratch set per board size across all calls/bots instead;
+    // JS is single-threaded and no call here re-enters another, so nothing else can
+    // be using the buffer at the same time.
+    static _scratch(size) {
+      let s = BotController._scratchBufs;
+      if (!s || s.size !== size) {
+        s = BotController._scratchBufs = {
+          size, owner: new Int16Array(size), dist: new Int16Array(size),
+          queue: new Int32Array(size), oppCounts: new Int32Array(64)
+        };
+      }
+      return s;
+    }
     _territoryScore(myPos, me, sim, grid, cols, rows, wallMode) {
       const idx = (x, y) => y * cols + x;
       if (wallMode !== 'wrap' && (myPos.x < 0 || myPos.x >= cols || myPos.y < 0 || myPos.y >= rows)) return -Infinity;
       if (grid[idx(myPos.x, myPos.y)] === 1) return -Infinity;
 
       const size = cols * rows;
-      const owner = new Int16Array(size).fill(-1); // -1 = unclaimed, -2 = contested, 0 = me, >0 = opponent id
-      const dist = new Int16Array(size).fill(-1);
-      const queue = new Int32Array(size);
+      const buf = BotController._scratch(size);
+      const owner = buf.owner.fill(-1); // -1 = unclaimed, -2 = contested, 0 = me, >0 = opponent id
+      const dist = buf.dist.fill(-1);
+      const queue = buf.queue;
       let qTail = 0;
 
       const seed = (x, y, ownerId) => {
@@ -1234,14 +1284,14 @@
       }
 
       let myCount = 0;
-      const oppCounts = new Map();
+      const oppCounts = buf.oppCounts.fill(0); // indexed by opponent slot id (nextOpp, max 8 players)
       for (let i = 0; i < size; i++) {
         const o = owner[i];
         if (o === 0) myCount++;
-        else if (o > 0) oppCounts.set(o, (oppCounts.get(o) || 0) + 1);
+        else if (o > 0) oppCounts[o]++;
       }
       let worstOpp = 0;
-      for (const c of oppCounts.values()) worstOpp = Math.max(worstOpp, c);
+      for (let i = 1; i < oppCounts.length; i++) if (oppCounts[i] > worstOpp) worstOpp = oppCounts[i];
       return myCount - worstOpp;
     }
     // Multiple extra plies for IMPOSSIBLE: from a hypothetical position, recursively
@@ -1256,8 +1306,13 @@
     // candidates that only trap the bot a few ticks later get ruled out now instead
     // of being discovered too late.
     _deepLookahead(pos, incomingDir, me, sim, cols, rows, wallMode, grid, plies) {
-      const score = this._territoryScore(pos, me, sim, grid, cols, rows, wallMode);
-      if (plies <= 0 || score === -Infinity) return score;
+      // Every candidate cell reaching this point already passed the same
+      // occupied/bounds check _territoryScore would redo (the caller -- either
+      // landingFrom() at the top level or the child-move check below -- already
+      // verified it), so that check can never actually trip here. Only the leaf
+      // needs the real (expensive) score; interior nodes just need to know whether
+      // any live continuation exists, which the recursion below already proves.
+      if (plies <= 0) return this._territoryScore(pos, me, sim, grid, cols, rows, wallMode);
 
       const idx = pos.y * cols + pos.x;
       const prev = grid[idx];
@@ -1786,7 +1841,7 @@
     peer = new Peer(roomCode, { debug: 0, config: ICE_CONFIG });
     hostState = {
       ui,
-      roster: [{ id: 'p1', color: PALETTE[0], name: sanitizeName(hostName), team: ui.teams ? 'A' : null, isHost: true, ready: true, connected: true }],
+      roster: [{ id: 'p1', color: PALETTE[0], name: sanitizeName(hostName), team: ui.teams ? 'A' : null, isHost: true, ready: true, connected: true, infiniteBoost: ui.infiniteBoosts }],
       connections: {},
     };
     peer.on('open', (id) => {
@@ -1798,6 +1853,8 @@
       $('lobbyReady').style.display = 'none';
       $('lobbyStart').style.display = 'inline-block';
       $('hostBotField').style.display = 'block';
+      $('hostInfiniteField').style.display = 'block';
+      $('lobbyInfiniteToggle').classList.toggle('on', hostState.ui.infiniteBoosts);
       makeSegmented($('hostBotDifficulty'), BOT_DIFFICULTY_OPTIONS, hostNextBotDifficulty, v => hostNextBotDifficulty = v);
       switchScreen('lobby');
       renderLobbyHost();
@@ -1810,7 +1867,7 @@
         const half = Math.ceil(hostState.ui.maxPlayers / 2);
         const team = hostState.ui.teams ? (idx < half ? 'A' : 'B') : null;
         const pid = 'p' + (idx + 1);
-        hostState.roster.push({ id: pid, color: PALETTE[idx], name: 'Player ' + (idx + 1), team, isHost: false, ready: false, connected: true });
+        hostState.roster.push({ id: pid, color: PALETTE[idx], name: 'Player ' + (idx + 1), team, isHost: false, ready: false, connected: true, infiniteBoost: hostState.ui.infiniteBoosts });
         hostState.connections[conn.peer] = { conn, playerId: pid };
         conn.send({ type: 'welcome', playerId: pid, color: PALETTE[idx] });
         conn.on('data', (data) => handleHostMessage(pid, data));
@@ -1833,6 +1890,9 @@
     } else if (data.type === 'name') {
       const r = hostState.roster.find(r => r.id === pid);
       if (r) { r.name = sanitizeName(data.name); broadcastLobby(); renderLobbyHost(); }
+    } else if (data.type === 'infiniteBoost') {
+      const r = hostState.roster.find(r => r.id === pid);
+      if (r) { r.infiniteBoost = !!data.value; broadcastLobby(); renderLobbyHost(); }
     }
   }
   function handleGuestDisconnect(pid) {
@@ -1850,7 +1910,7 @@
     Object.values(hostState.connections).forEach(c => { if (c.conn.open) c.conn.send(msg); });
   }
   function broadcastLobby() {
-    broadcastToAll({ type: 'lobby', roster: hostState.roster.map(r => ({ id: r.id, color: r.color, name: r.name, team: r.team, ready: r.ready, isHost: r.isHost, isBot: !!r.isBot, connected: r.connected })), ui: hostState.ui });
+    broadcastToAll({ type: 'lobby', roster: hostState.roster.map(r => ({ id: r.id, color: r.color, name: r.name, team: r.team, ready: r.ready, isHost: r.isHost, isBot: !!r.isBot, connected: r.connected, infiniteBoost: !!r.infiniteBoost })), ui: hostState.ui });
   }
   function hostAddBot() {
     if (!hostState) return;
@@ -1861,7 +1921,7 @@
     const pid = 'p' + (idx + 1);
     const difficulty = hostNextBotDifficulty;
     const name = botDisplayName(hostState.roster, difficulty);
-    hostState.roster.push({ id: pid, color: PALETTE[idx], name, team, isHost: false, isBot: true, difficulty, ready: true, connected: true });
+    hostState.roster.push({ id: pid, color: PALETTE[idx], name, team, isHost: false, isBot: true, difficulty, ready: true, connected: true, infiniteBoost: hostState.ui.infiniteBoosts });
     broadcastLobby();
     renderLobbyHost();
   }
@@ -1881,14 +1941,42 @@
     broadcastLobby();
     renderLobbyHost();
   }
+  // Per-player toggle: the host can flip this for their own row and for bots directly.
+  // Guests own this switch for their own row instead (see the 'infiniteBoost' message
+  // handled in handleHostMessage) -- renderLobbyHost only renders it as a clickable
+  // button for host/bot rows and shows a read-only badge for guest rows so the two
+  // control paths never fight over the same value.
+  function hostToggleInfiniteBoost(id) {
+    if (!hostState) return;
+    const r = hostState.roster.find(r => r.id === id);
+    if (!r) return;
+    r.infiniteBoost = !r.infiniteBoost;
+    broadcastLobby();
+    renderLobbyHost();
+  }
+  // Bulk action: flips the room's starting default AND stamps every current roster
+  // entry (host, bots, connected guests) to match in one go -- "flip the switch for
+  // everyone." Anyone can still flip their own row back afterward.
+  function hostToggleAllInfiniteBoost() {
+    if (!hostState) return;
+    hostState.ui.infiniteBoosts = !hostState.ui.infiniteBoosts;
+    hostState.roster.forEach(r => { r.infiniteBoost = hostState.ui.infiniteBoosts; });
+    $('lobbyInfiniteToggle').classList.toggle('on', hostState.ui.infiniteBoosts);
+    broadcastLobby();
+    renderLobbyHost();
+  }
   function renderLobbyHost() {
     const list = $('lobbyList'); list.innerHTML = '';
     hostState.roster.forEach(r => {
       const row = document.createElement('div'); row.className = 'lobby-row';
+      const infPart = (r.isHost || r.isBot)
+        ? '<button type="button" class="mini-btn inf-toggle' + (r.infiniteBoost ? ' on' : '') + '" data-inf-toggle="' + r.id + '">INF ' + (r.infiniteBoost ? 'ON' : 'OFF') + '</button>'
+        : '<span class="ready-pip ' + (r.infiniteBoost ? 'yes' : 'no') + '">INF ' + (r.infiniteBoost ? 'ON' : 'OFF') + '</span>';
       const right = r.isBot
         ? '<button type="button" class="mini-btn diff-' + r.difficulty + '" data-bot-diff="' + r.id + '">' + r.difficulty.toUpperCase() + '</button>' +
+          infPart +
           '<button type="button" class="mini-btn danger" data-bot-remove="' + r.id + '">REMOVE</button>'
-        : '<span class="ready-pip ' + (r.isHost || r.ready ? 'yes' : 'no') + '">' + (r.isHost ? 'HOST' : (r.ready ? 'READY' : 'WAITING')) + '</span>';
+        : '<span class="ready-pip ' + (r.isHost || r.ready ? 'yes' : 'no') + '">' + (r.isHost ? 'HOST' : (r.ready ? 'READY' : 'WAITING')) + '</span>' + infPart;
       row.innerHTML = '<span class="dot" style="background:' + r.color + ';box-shadow:0 0 6px ' + r.color + '"></span>' +
         '<span class="lname">' + escapeHtml(r.name) + (r.isHost ? ' (host)' : '') + (r.isBot ? ' (bot)' : '') + '</span>' +
         (r.team ? '<span class="ltag">TEAM ' + r.team + '</span>' : '') +
@@ -1897,6 +1985,7 @@
     });
     list.querySelectorAll('[data-bot-diff]').forEach(btn => btn.addEventListener('click', () => hostCycleBotDifficulty(btn.getAttribute('data-bot-diff'))));
     list.querySelectorAll('[data-bot-remove]').forEach(btn => btn.addEventListener('click', () => hostRemoveBot(btn.getAttribute('data-bot-remove'))));
+    list.querySelectorAll('[data-inf-toggle]').forEach(btn => btn.addEventListener('click', () => hostToggleInfiniteBoost(btn.getAttribute('data-inf-toggle'))));
     const allReady = hostState.roster.every(r => r.isHost || r.isBot || r.ready);
     $('lobbyStart').disabled = !allReady || hostState.roster.length < 2;
     $('hostAddBot').disabled = hostState.roster.length >= hostState.ui.maxPlayers;
@@ -1905,7 +1994,7 @@
     destroyActiveControllers();
     const settings = fullSettingsFromUi(hostState.ui);
     renderer.configure(settings.cols, settings.rows, BOARD_PRESETS[hostState.ui.boardSize].cellSize);
-    const roster = hostState.roster.map(r => ({ id: r.id, color: r.color, team: r.team, name: r.name, isBot: !!r.isBot, difficulty: r.difficulty || null, infiniteBoost: !!r.isBot && r.difficulty === 'impossible' }));
+    const roster = hostState.roster.map(r => ({ id: r.id, color: r.color, team: r.team, name: r.name, isBot: !!r.isBot, difficulty: r.difficulty || null, infiniteBoost: !!r.infiniteBoost }));
     const slots = {};
     hostState.remoteSlots = {};
     const localController = new KeyboardController(hostOwnScheme);
@@ -1999,6 +2088,7 @@
       $('lobbyReady').style.display = 'inline-block';
       $('lobbyStart').style.display = 'none';
       $('hostBotField').style.display = 'none';
+      $('hostInfiniteField').style.display = 'none';
       switchScreen('lobby');
     } else if (data.type === 'full') {
       teardownNetwork();
@@ -2031,12 +2121,22 @@
     const list = $('lobbyList'); list.innerHTML = '';
     guestState.roster.forEach(r => {
       const row = document.createElement('div'); row.className = 'lobby-row';
+      const isMe = r.id === guestState.playerId;
+      const infPart = isMe
+        ? '<button type="button" class="mini-btn inf-toggle' + (r.infiniteBoost ? ' on' : '') + '" data-inf-self>INF ' + (r.infiniteBoost ? 'ON' : 'OFF') + '</button>'
+        : '<span class="ready-pip ' + (r.infiniteBoost ? 'yes' : 'no') + '">INF ' + (r.infiniteBoost ? 'ON' : 'OFF') + '</span>';
       row.innerHTML = '<span class="dot" style="background:' + r.color + ';box-shadow:0 0 6px ' + r.color + '"></span>' +
-        '<span class="lname">' + escapeHtml(r.name) + (r.isHost ? ' (host)' : '') + (r.isBot ? ' (bot)' : '') + (r.id === guestState.playerId ? ' (you)' : '') + '</span>' +
+        '<span class="lname">' + escapeHtml(r.name) + (r.isHost ? ' (host)' : '') + (r.isBot ? ' (bot)' : '') + (isMe ? ' (you)' : '') + '</span>' +
         (r.team ? '<span class="ltag">TEAM ' + r.team + '</span>' : '') +
-        '<span class="ready-pip ' + (r.isHost || r.isBot || r.ready ? 'yes' : 'no') + '">' + (r.isHost ? 'HOST' : (r.isBot ? 'BOT' : (r.ready ? 'READY' : 'WAITING'))) + '</span>';
+        '<span class="ready-pip ' + (r.isHost || r.isBot || r.ready ? 'yes' : 'no') + '">' + (r.isHost ? 'HOST' : (r.isBot ? 'BOT' : (r.ready ? 'READY' : 'WAITING'))) + '</span>' +
+        infPart;
       list.appendChild(row);
     });
+    list.querySelectorAll('[data-inf-self]').forEach(btn => btn.addEventListener('click', () => {
+      const mine = guestState.roster.find(r => r.id === guestState.playerId);
+      const next = !(mine && mine.infiniteBoost);
+      if (hostConn && hostConn.open) hostConn.send({ type: 'infiniteBoost', value: next });
+    }));
   }
   function setGameControlsStrip(text) { $('gameControlsStrip').textContent = text; }
 
@@ -2076,7 +2176,7 @@
   $('joinBack').addEventListener('click', () => switchScreen('onlineChoice'));
 
   // ---- LOCAL SETUP ----
-  const localUi = { count: 2, teams: false, boardSize: 'medium', speed: 'normal', winScore: 5, wallMode: 'solid' };
+  const localUi = { count: 2, teams: false, boardSize: 'medium', speed: 'normal', winScore: 5, wallMode: 'solid', infiniteBoosts: false };
   function initLocalSetup() {
     renderLocalPlayersPreview();
     renderLocalControls();
@@ -2084,6 +2184,7 @@
     makeSegmented($('localSpeed'), speedOptions(), localUi.speed, v => localUi.speed = v);
     makeSegmented($('localWinScore'), scoreOptions(), localUi.winScore, v => localUi.winScore = v);
     makeSegmented($('localWallMode'), wallOptions(), localUi.wallMode, v => localUi.wallMode = v);
+    $('localInfiniteBoostsToggle').classList.toggle('on', localUi.infiniteBoosts);
   }
   function renderLocalPlayersPreview() {
     $('localCountVal').textContent = localUi.count;
@@ -2101,6 +2202,12 @@
   $('localCountMinus').addEventListener('click', () => { if (localUi.count > 2) { localUi.count--; renderLocalPlayersPreview(); } });
   $('localCountPlus').addEventListener('click', () => { if (localUi.count < MAX_LOCAL) { localUi.count++; renderLocalPlayersPreview(); } });
   $('localTeamsToggle').addEventListener('click', () => { localUi.teams = !localUi.teams; $('localTeamsToggle').classList.toggle('on', localUi.teams); });
+  $('localInfiniteBoostsToggle').addEventListener('click', () => {
+    localUi.infiniteBoosts = !localUi.infiniteBoosts;
+    $('localInfiniteBoostsToggle').classList.toggle('on', localUi.infiniteBoosts);
+    for (let i = 0; i < MAX_LOCAL; i++) localInfiniteBoostFlags[i] = localUi.infiniteBoosts;
+    renderLocalControls();
+  });
 
   function renderLocalControls() {
     const wrap = $('localControlsList'); wrap.innerHTML = '';
@@ -2120,6 +2227,16 @@
       botToggle.addEventListener('click', () => { localBotFlags[i] = !localBotFlags[i]; renderLocalControls(); });
       botRow.appendChild(botLabel); botRow.appendChild(botToggle);
       block.appendChild(botRow);
+
+      const infRow = document.createElement('div');
+      infRow.className = 'toggle-row'; infRow.style.marginBottom = '10px';
+      const infLabel = document.createElement('div'); infLabel.className = 'field-label'; infLabel.textContent = 'INFINITE BOOST';
+      const infToggle = document.createElement('div');
+      infToggle.className = 'toggle' + (localInfiniteBoostFlags[i] ? ' on' : '');
+      infToggle.innerHTML = '<div class="knob"></div>';
+      infToggle.addEventListener('click', () => { localInfiniteBoostFlags[i] = !localInfiniteBoostFlags[i]; renderLocalControls(); });
+      infRow.appendChild(infLabel); infRow.appendChild(infToggle);
+      block.appendChild(infRow);
 
       if (localBotFlags[i]) {
         const diffWrap = document.createElement('div'); diffWrap.className = 'segmented';
@@ -2163,7 +2280,7 @@
       const isBot = localBotFlags[i];
       const difficulty = isBot ? localBotDifficulty[i] : null;
       const name = isBot ? botDisplayName(roster, difficulty) : ('Player ' + (i + 1));
-      roster.push({ id, color: PALETTE[i], team, name, isBot, difficulty, infiniteBoost: isBot && difficulty === 'impossible' });
+      roster.push({ id, color: PALETTE[i], team, name, isBot, difficulty, infiniteBoost: localInfiniteBoostFlags[i] });
       if (isBot) {
         slots[id] = new BotController(id, localBotDifficulty[i]);
         controlsStripParts.push('P' + (i + 1) + ': BOT (' + localBotDifficulty[i].toUpperCase() + ')');
@@ -2182,7 +2299,7 @@
   });
 
   // ---- HOST SETUP ----
-  const hostUi = { maxPlayers: 2, teams: false, boardSize: 'medium', speed: 'normal', winScore: 5, wallMode: 'solid' };
+  const hostUi = { maxPlayers: 2, teams: false, boardSize: 'medium', speed: 'normal', winScore: 5, wallMode: 'solid', infiniteBoosts: false };
   function initHostSetup() {
     makeSegmented($('hostRoomSize'), ROOM_SIZES.map(n => ({ value: n, label: n })), hostUi.maxPlayers, v => { hostUi.maxPlayers = v; $('hostTeamsField').style.display = v >= 4 ? 'block' : 'none'; if (v < 4) hostUi.teams = false, $('hostTeamsToggle').classList.remove('on'); });
     $('hostTeamsField').style.display = hostUi.maxPlayers >= 4 ? 'block' : 'none';
@@ -2190,12 +2307,14 @@
     makeSegmented($('hostSpeed'), speedOptions(), hostUi.speed, v => hostUi.speed = v);
     makeSegmented($('hostWinScore'), scoreOptions(), hostUi.winScore, v => hostUi.winScore = v);
     makeSegmented($('hostWallMode'), wallOptions(), hostUi.wallMode, v => hostUi.wallMode = v);
+    $('hostInfiniteBoostsToggle').classList.toggle('on', hostUi.infiniteBoosts);
     renderControlEditor($('hostControlsEditor'), hostOwnScheme, (dir, key) => {
       for (const d of ['up', 'down', 'left', 'right', 'boost']) { if (d !== dir && hostOwnScheme[d][0] === key) return true; }
       return false;
     }, () => {});
   }
   $('hostTeamsToggle').addEventListener('click', () => { hostUi.teams = !hostUi.teams; $('hostTeamsToggle').classList.toggle('on', hostUi.teams); });
+  $('hostInfiniteBoostsToggle').addEventListener('click', () => { hostUi.infiniteBoosts = !hostUi.infiniteBoosts; $('hostInfiniteBoostsToggle').classList.toggle('on', hostUi.infiniteBoosts); });
   $('hostCreate').addEventListener('click', () => hostCreateRoom(hostUi, $('hostName').value));
 
   // ---- JOIN SETUP ----
@@ -2223,6 +2342,7 @@
   });
   $('lobbyStart').addEventListener('click', () => { if (hostState) hostStartMatch(); });
   $('hostAddBot').addEventListener('click', () => hostAddBot());
+  $('lobbyInfiniteToggle').addEventListener('click', () => { if (hostState) hostToggleAllInfiniteBoost(); });
   $('lobbyLeave').addEventListener('click', () => { teardownNetwork(); switchScreen('menu'); });
 
   // ---- GAME ----
