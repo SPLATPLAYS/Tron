@@ -1626,7 +1626,7 @@
         type: 'frame',
         players: this.sim.players.map(p => ({
           id: p.id, x: p.x, y: p.y, alive: p.alive,
-          boosting: p.boostTicks > 0, boostsLeft: p.boostsLeft,
+          boosting: p.boostTicks > 0, boostsLeft: Number.isFinite(p.boostsLeft) ? p.boostsLeft : -1,
           newSegs: p.addedThisTick,
         })),
       });
