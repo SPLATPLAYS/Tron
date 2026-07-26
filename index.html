@@ -1460,11 +1460,20 @@
         ctx.strokeStyle = (y % 5 === 0) ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.035)';
         ctx.beginPath(); ctx.moveTo(0, y * cs + 0.5); ctx.lineTo(this.canvas.width, y * cs + 0.5); ctx.stroke();
       }
+      const DEAD_FADE_MS = 900;
       for (const p of view.players) {
         const dark = darkenHex(p.color, 90);
+        let fade = 1;
+        if (!p.alive) {
+          if (p._deadAt == null) p._deadAt = performance.now();
+          fade = Math.max(0, 1 - (performance.now() - p._deadAt) / DEAD_FADE_MS);
+        } else if (p._deadAt != null) {
+          p._deadAt = null;
+        }
+        if (fade <= 0) continue;
         for (const seg of p.trail) {
-          if (seg.boost) { ctx.fillStyle = dark; ctx.globalAlpha = 0.4; }
-          else { ctx.fillStyle = p.color; ctx.globalAlpha = 0.85; }
+          if (seg.boost) { ctx.fillStyle = dark; ctx.globalAlpha = 0.4 * fade; }
+          else { ctx.fillStyle = p.color; ctx.globalAlpha = 0.85 * fade; }
           ctx.fillRect(seg.x * cs + 1, seg.y * cs + 1, cs - 2, cs - 2);
         }
         ctx.globalAlpha = 1;
