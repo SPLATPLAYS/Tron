@@ -386,6 +386,28 @@
   .p-chip .p-boost { display: flex; gap: 3px; margin-left: 1px; }
   .p-chip .p-boost span { width: 6px; height: 6px; border-radius: 50%; background: var(--pc); opacity: 0.22; transition: opacity 0.15s; }
   .p-chip .p-boost span.filled { opacity: 1; box-shadow: 0 0 5px var(--pc); }
+  .p-chip .p-boost.infinite { align-items: center; }
+  .p-chip .p-boost .infinity-glyph { font-size: 17px; line-height: 1; color: var(--danger); text-shadow: 0 0 6px var(--danger); font-weight: 700; transform: translateY(-1px); }
+
+  /* Bot names are tinted by difficulty so you can tell a match's skill level at a
+     glance -- impossible bots get an unstable black/white glitch instead of a color. */
+  .p-name.bot-name-peaceful { color: var(--p8); }
+  .p-name.bot-name-easy { color: var(--p3); }
+  .p-name.bot-name-medium { color: var(--accent); }
+  .p-name.bot-name-hard { color: var(--p2); }
+  .p-name.bot-name-impossible {
+    font-weight: 800;
+    animation: botNameGlitch 4.2s steps(1) infinite;
+  }
+  @keyframes botNameGlitch {
+    0%, 90%, 100% { color: #f4f7fa; text-shadow: none; letter-spacing: normal; transform: none; }
+    91% { color: #0a0a0a; text-shadow: 2px 0 var(--danger), -2px 0 var(--p1); transform: translateX(-1px); }
+    92% { color: #f4f7fa; text-shadow: none; transform: none; }
+    93% { color: #0a0a0a; text-shadow: -2px 0 var(--danger), 2px 0 var(--p1); letter-spacing: 1px; transform: translateX(1px); }
+    94% { color: #f4f7fa; text-shadow: none; letter-spacing: normal; transform: none; }
+    95% { color: #0a0a0a; text-shadow: 2px 0 var(--p1), -2px 0 var(--danger); transform: translateX(-1px); }
+    96%, 100% { color: #f4f7fa; text-shadow: none; transform: none; }
+  }
 
   #hudCenter {
     font-family: 'Orbitron', sans-serif;
@@ -722,6 +744,14 @@
     { value: 'hard',       label: 'HARD' },
     { value: 'impossible', label: 'IMPOSSIBLE' },
   ];
+  // Bots are named after their difficulty (e.g. "Easy Bot 1"), numbered within their
+  // own tier -- so the second peaceful bot in a match is "Peaceful Bot 2" even if
+  // it's the fourth bot added overall. `roster` is whatever's been assembled so far.
+  function botDisplayName(roster, difficulty) {
+    const nice = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+    const count = roster.filter(r => r.isBot && r.difficulty === difficulty).length + 1;
+    return nice + ' Bot ' + count;
+  }
 
   const DIRS = {
     UP:    { x: 0,  y: -1 },
@@ -906,6 +936,11 @@
   // attachSim once the MatchController that owns it exists).
   // ===================================================================
   const BOT_DIFFICULTIES = ['peaceful', 'easy', 'medium', 'hard', 'impossible'];
+  // How many of its own future moves an IMPOSSIBLE bot plays out before scoring a
+  // candidate. Branching is at most 3 (no reversing), so cost is ~3^plies leaf
+  // evaluations per candidate -- 5 is deep enough to see well past most self-trap
+  // sequences while staying cheap (a few hundred cheap BFS calls per bot per tick).
+  const IMPOSSIBLE_LOOKAHEAD_PLIES = 5;
 
   class BotController {
     constructor(playerId, difficulty) {
@@ -930,6 +965,11 @@
       return grid;
     }
     getIntent() {
+      const d = this._decideDirection();
+      if (d) this._lastDir = d; // getBoost() reads this to know what direction is ACTUALLY about to be driven this tick
+      return d;
+    }
+    _decideDirection() {
       const sim = this.sim;
       if (!sim) return null;
       const me = sim.players.find(p => p.id === this.playerId);
@@ -946,6 +986,21 @@
       const isBlocked = (x, y) => {
         if (wallMode !== 'wrap' && (x < 0 || x >= cols || y < 0 || y >= rows)) return true;
         return grid[y * cols + x] === 1;
+      };
+      // If a boost from an earlier tick is still carrying us, THIS tick is already
+      // guaranteed to cover two cells in whatever direction gets picked -- the back
+      // half of that move never gets its own turn decision. So the candidate's real
+      // landing spot (and everything scored off it) has to be validated two cells
+      // deep, not one, or a direction that's clear immediately ahead but has a trail
+      // sitting one cell further on reads as "safe" right up until it isn't.
+      const myDoubleStep = me.boostTicks > 0;
+      const landingFrom = (x, y, dir) => {
+        const p1 = stepFrom(x, y, dir);
+        if (isBlocked(p1.x, p1.y)) return null;
+        if (!myDoubleStep) return p1;
+        const p2 = stepFrom(p1.x, p1.y, dir);
+        if (isBlocked(p2.x, p2.y)) return null;
+        return p2;
       };
 
       const candidates = Object.keys(DIRS).filter(d => d !== OPPOSITE[me.dir]);
@@ -966,17 +1021,22 @@
       // in a 4p match) would never see a problem until they land on the same cell on
       // the same tick. Predict each opponent's next cell (assuming they keep going
       // straight) and treat it as contested, so bots swerve a tick early instead of
-      // colliding head-on.
+      // colliding head-on. An opponent who's mid-boost covers two cells this tick too,
+      // so project both when that's the case.
       const predicted = new Set();
       for (const other of sim.players) {
         if (other.id === this.playerId || !other.alive) continue;
         const np = stepFrom(other.x, other.y, other.dir);
         predicted.add(np.x + ',' + np.y);
+        if (other.boostTicks > 0) {
+          const np2 = stepFrom(np.x, np.y, other.dir);
+          predicted.add(np2.x + ',' + np2.y);
+        }
       }
       const isContested = (x, y) => predicted.has(x + ',' + y);
 
-      const safe = candidates.filter(d => { const np = stepFrom(me.x, me.y, d); return !isBlocked(np.x, np.y); });
-      const uncontested = safe.filter(d => { const np = stepFrom(me.x, me.y, d); return !isContested(np.x, np.y); });
+      const safe = candidates.filter(d => landingFrom(me.x, me.y, d) !== null);
+      const uncontested = safe.filter(d => { const np = landingFrom(me.x, me.y, d); return !isContested(np.x, np.y); });
       // prefer a move nothing else is predicted to land on; fall back to merely-safe,
       // then to any candidate at all rather than freezing.
       const pool = uncontested.length ? uncontested : (safe.length ? safe : candidates);
@@ -989,8 +1049,8 @@
       if (this.difficulty === 'easy' || this.difficulty === 'medium') {
         let bestScore = -1;
         const scored = pool.map(d => {
-          const np = stepFrom(me.x, me.y, d);
-          const score = this._floodFill(np.x, np.y, grid, cols, rows, wallMode);
+          const np = landingFrom(me.x, me.y, d);
+          const score = np ? this._floodFill(np.x, np.y, grid, cols, rows, wallMode) : -1;
           if (score > bestScore) bestScore = score;
           return { d, score };
         });
@@ -1006,8 +1066,8 @@
       // cells -- this is what lets it actively cut opponents off rather than just
       // avoiding them.
       const scored = pool.map(d => {
-        const np = stepFrom(me.x, me.y, d);
-        return { d, score: this._territoryScore(np, me, sim, grid, cols, rows, wallMode) };
+        const np = landingFrom(me.x, me.y, d);
+        return { d, score: np ? this._territoryScore(np, me, sim, grid, cols, rows, wallMode) : -Infinity };
       });
       scored.sort((a, b) => b.score - a.score);
       const bestScore = scored[0].score;
@@ -1027,14 +1087,15 @@
         return scored[0].d;
       }
 
-      // IMPOSSIBLE: looks one more move deeper on every remaining candidate --
-      // checking it isn't walking into a dead end that only reveals itself a tick
-      // later -- then commits to whichever holds up best under that scrutiny. No
-      // randomness; always takes the strongest option it can find.
+      // IMPOSSIBLE: doesn't stop at the immediate territory score -- it plays out
+      // several of its own moves ahead (see _deepLookahead) on every remaining
+      // candidate, so a move that looks fine this tick but only reveals a dead end
+      // 3-4 ticks later gets ruled out now instead of being discovered too late.
+      // No randomness; always takes the strongest option that survives the search.
       let best = scored[0], bestAdjusted = -Infinity;
       for (const cand of scored) {
-        const np = stepFrom(me.x, me.y, cand.d);
-        const lookahead = this._lookaheadScore(np, me, sim, cols, rows, wallMode);
+        const np = landingFrom(me.x, me.y, cand.d);
+        const lookahead = np ? this._deepLookahead(np, cand.d, me, sim, cols, rows, wallMode, grid, IMPOSSIBLE_LOOKAHEAD_PLIES) : -Infinity;
         if (lookahead > bestAdjusted) { bestAdjusted = lookahead; best = cand; }
       }
       return best.d;
@@ -1047,13 +1108,46 @@
       if (!me || !me.alive || me.boostsLeft <= 0 || me.boostTicks > 0) return false;
       if (this.difficulty === 'medium') return Math.random() < 0.02; // sparing, occasional use
       if (this.difficulty === 'hard') return Math.random() < 0.045;
-      // IMPOSSIBLE: burns boosts with intent -- to blast out of a tightening pocket, or
-      // simply to press an advantage more often than the lower tiers bother to.
+      // IMPOSSIBLE: a boost commits to two full cells in whatever direction this tick's
+      // intent already picked, with no turn in between -- so it only pulls the trigger
+      // when that lane is actually clear (not blocked, and no opponent could plausibly
+      // be there in a tick or two). Being an unlimited resource doesn't change that:
+      // boosting into something it can't react to is a mistake regardless of supply.
       const { cols, rows, wallMode } = sim.settings;
       const grid = BotController._grid(sim);
+      if (!this._boostLaneClear(me, sim, grid, cols, rows, wallMode)) return false;
       const openAhead = this._floodFill(me.x, me.y, grid, cols, rows, wallMode);
       if (openAhead < 6) return true;
       return Math.random() < 0.09;
+    }
+    // Checks the two cells directly ahead in the direction this tick's getIntent()
+    // just chose -- NOT me.dir, which still holds last tick's heading until step()
+    // applies the new intent -- since that's the exact span a boost this tick would
+    // cover. Vetoes on existing trail or any live opponent who could plausibly reach
+    // one of those cells within that time (projected along their own current heading).
+    _boostLaneClear(me, sim, grid, cols, rows, wallMode) {
+      const dir = this._lastDir || me.dir;
+      const d = DIRS[dir];
+      let x = me.x, y = me.y;
+      const cells = [];
+      for (let step = 0; step < 2; step++) {
+        x += d.x; y += d.y;
+        if (wallMode === 'wrap') { x = (x + cols) % cols; y = (y + rows) % rows; }
+        else if (x < 0 || x >= cols || y < 0 || y >= rows) return false;
+        if (grid[y * cols + x] === 1) return false;
+        cells.push(x + ',' + y);
+      }
+      for (const other of sim.players) {
+        if (other.id === this.playerId || !other.alive) continue;
+        let ox = other.x, oy = other.y;
+        const od = DIRS[other.dir];
+        for (let step = 0; step < 2; step++) {
+          ox += od.x; oy += od.y;
+          if (wallMode === 'wrap') { ox = (ox + cols) % cols; oy = (oy + rows) % rows; }
+          if (cells.includes(ox + ',' + oy)) return false;
+        }
+      }
+      return true;
     }
     _floodFill(sx, sy, grid, cols, rows, wallMode) {
       const cap = 400; // perf cap -- enough to reliably tell open regions apart, cheap even with many bots
@@ -1150,21 +1244,38 @@
       for (const c of oppCounts.values()) worstOpp = Math.max(worstOpp, c);
       return myCount - worstOpp;
     }
-    // One extra ply for IMPOSSIBLE: from a hypothetical position, what's the best
-    // territory score still reachable next move? Catches "looked fine this tick, dead
-    // end next tick" traps that plain territory scoring can't see coming.
-    _lookaheadScore(pos, me, sim, cols, rows, wallMode) {
-      const grid = BotController._grid(sim);
+    // Multiple extra plies for IMPOSSIBLE: from a hypothetical position, recursively
+    // plays out its OWN next `plies` moves (opponents are re-raced fresh from their
+    // current cell at every leaf via _territoryScore, so the search stays cheap
+    // enough to run several moves deep instead of just one). Each step temporarily
+    // marks the cell it would occupy as blocked -- so the search can't loop back
+    // through its own hypothetical trail -- then restores it before returning, so
+    // the shared per-tick occupancy grid is left exactly as it found it. Returns the
+    // best territory score reachable along any surviving line; a branch that runs out
+    // of room entirely (a real dead end) scores far below any live position, so
+    // candidates that only trap the bot a few ticks later get ruled out now instead
+    // of being discovered too late.
+    _deepLookahead(pos, incomingDir, me, sim, cols, rows, wallMode, grid, plies) {
+      const score = this._territoryScore(pos, me, sim, grid, cols, rows, wallMode);
+      if (plies <= 0 || score === -Infinity) return score;
+
+      const idx = pos.y * cols + pos.x;
+      const prev = grid[idx];
+      grid[idx] = 1; // occupy for the duration of this branch's deeper search
+
       let best = -Infinity;
       for (const d of Object.keys(DIRS)) {
+        if (d === OPPOSITE[incomingDir]) continue; // can't reverse into your own neck
         const dd = DIRS[d];
         let nx = pos.x + dd.x, ny = pos.y + dd.y;
         if (wallMode === 'wrap') { nx = (nx + cols) % cols; ny = (ny + rows) % rows; }
         else if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
         if (grid[ny * cols + nx] === 1) continue;
-        const score = this._territoryScore({ x: nx, y: ny }, me, sim, grid, cols, rows, wallMode);
-        if (score > best) best = score;
+        const s = this._deepLookahead({ x: nx, y: ny }, d, me, sim, cols, rows, wallMode, grid, plies - 1);
+        if (s > best) best = s;
       }
+
+      grid[idx] = prev; // restore -- this branch is done, the shared grid must be unchanged for siblings
       return best === -Infinity ? -9999 : best;
     }
   }
@@ -1173,13 +1284,14 @@
   // SIMULATION (deterministic, pure state transitions)
   // ===================================================================
   class Player {
-    constructor(id, color, x, y, dir, team, name) {
+    constructor(id, color, x, y, dir, team, name, infiniteBoost) {
       this.id = id; this.color = color; this.team = team; this.name = name;
       this.x = x; this.y = y; this.dir = dir;
       this.trail = [{ x, y, boost: false }];
       this.occupied = new Set([x + ',' + y]);
       this.alive = true;
-      this.boostsLeft = BOOST_MAX;
+      this.infiniteBoost = !!infiniteBoost;
+      this.boostsLeft = this.infiniteBoost ? Infinity : BOOST_MAX;
       this.boostTicks = 0;      // ticks remaining of an active speed burst
       this.addedThisTick = [];  // segments laid down on the current tick (for network sync)
     }
@@ -1199,7 +1311,7 @@
     }
     reset() {
       const spawns = getSpawnPoints(this.roster.length, this.settings.cols, this.settings.rows);
-      this.players = this.roster.map((r, i) => new Player(r.id, r.color, spawns[i].x, spawns[i].y, spawns[i].dir, r.team, r.name));
+      this.players = this.roster.map((r, i) => new Player(r.id, r.color, spawns[i].x, spawns[i].y, spawns[i].dir, r.team, r.name, r.infiniteBoost));
       this.tick = 0; this.over = false; this.winnerId = null; this.winnerTeam = null;
     }
     applyIntent(p, intent) {
@@ -1248,7 +1360,7 @@
           if (!p.alive) continue;
           if (boostRequests[p.id] && p.boostsLeft > 0 && p.boostTicks <= 0) {
             p.boostTicks = BOOST_TICKS;
-            p.boostsLeft--;
+            if (!p.infiniteBoost) p.boostsLeft--;
           }
         }
       }
@@ -1333,11 +1445,15 @@
       const chip = document.createElement('div');
       chip.className = 'p-chip';
       chip.style.setProperty('--pc', r.color);
+      const nameClass = r.isBot && r.difficulty ? ' bot-name-' + r.difficulty : '';
+      const boostInner = r.infiniteBoost
+        ? '<span class="infinity-glyph">\u221e</span>'
+        : '<span class="filled"></span>'.repeat(BOOST_MAX);
       chip.innerHTML =
         '<span class="p-dot"></span>' +
-        '<span class="p-name">' + escapeHtml(r.name) + '</span>' +
+        '<span class="p-name' + nameClass + '">' + escapeHtml(r.name) + '</span>' +
         '<span class="p-score" id="score-' + r.id + '">0</span>' +
-        '<span class="p-boost" id="boost-' + r.id + '">' + '<span class="filled"></span>'.repeat(BOOST_MAX) + '</span>' +
+        '<span class="p-boost' + (r.infiniteBoost ? ' infinite' : '') + '" id="boost-' + r.id + '">' + boostInner + '</span>' +
         (r.team ? '<span class="p-team">' + r.team + '</span>' : '');
       hud.appendChild(chip);
     });
@@ -1345,7 +1461,7 @@
   function updateScoreChip(id, val) { const el = $('score-' + id); if (el) el.textContent = val; }
   function updateBoostChip(id, left) {
     const el = $('boost-' + id);
-    if (!el) return;
+    if (!el || el.classList.contains('infinite')) return;
     [...el.children].forEach((dot, i) => dot.classList.toggle('filled', i < left));
   }
   function showOverlay() { $('overlay').style.display = 'flex'; }
@@ -1743,8 +1859,9 @@
     const half = Math.ceil(hostState.ui.maxPlayers / 2);
     const team = hostState.ui.teams ? (idx < half ? 'A' : 'B') : null;
     const pid = 'p' + (idx + 1);
-    const n = hostState.roster.filter(r => r.isBot).length + 1;
-    hostState.roster.push({ id: pid, color: PALETTE[idx], name: 'Bot ' + n, team, isHost: false, isBot: true, difficulty: hostNextBotDifficulty, ready: true, connected: true });
+    const difficulty = hostNextBotDifficulty;
+    const name = botDisplayName(hostState.roster, difficulty);
+    hostState.roster.push({ id: pid, color: PALETTE[idx], name, team, isHost: false, isBot: true, difficulty, ready: true, connected: true });
     broadcastLobby();
     renderLobbyHost();
   }
@@ -1760,6 +1877,8 @@
     if (!r) return;
     const idx = BOT_DIFFICULTY_OPTIONS.findIndex(o => o.value === r.difficulty);
     r.difficulty = BOT_DIFFICULTY_OPTIONS[(idx + 1) % BOT_DIFFICULTY_OPTIONS.length].value;
+    r.name = botDisplayName(hostState.roster.filter(o => o.id !== r.id), r.difficulty);
+    broadcastLobby();
     renderLobbyHost();
   }
   function renderLobbyHost() {
@@ -1786,7 +1905,7 @@
     destroyActiveControllers();
     const settings = fullSettingsFromUi(hostState.ui);
     renderer.configure(settings.cols, settings.rows, BOARD_PRESETS[hostState.ui.boardSize].cellSize);
-    const roster = hostState.roster.map(r => ({ id: r.id, color: r.color, team: r.team, name: r.name }));
+    const roster = hostState.roster.map(r => ({ id: r.id, color: r.color, team: r.team, name: r.name, isBot: !!r.isBot, difficulty: r.difficulty || null, infiniteBoost: !!r.isBot && r.difficulty === 'impossible' }));
     const slots = {};
     hostState.remoteSlots = {};
     const localController = new KeyboardController(hostOwnScheme);
@@ -2042,7 +2161,9 @@
       const id = 'p' + (i + 1);
       const team = localUi.teams ? (i < half ? 'A' : 'B') : null;
       const isBot = localBotFlags[i];
-      roster.push({ id, color: PALETTE[i], team, name: isBot ? ('Bot ' + (i + 1)) : ('Player ' + (i + 1)) });
+      const difficulty = isBot ? localBotDifficulty[i] : null;
+      const name = isBot ? botDisplayName(roster, difficulty) : ('Player ' + (i + 1));
+      roster.push({ id, color: PALETTE[i], team, name, isBot, difficulty, infiniteBoost: isBot && difficulty === 'impossible' });
       if (isBot) {
         slots[id] = new BotController(id, localBotDifficulty[i]);
         controlsStripParts.push('P' + (i + 1) + ': BOT (' + localBotDifficulty[i].toUpperCase() + ')');
