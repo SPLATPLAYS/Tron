@@ -1087,9 +1087,10 @@
           if (score > bestScore) bestScore = score;
           return { d, score };
         });
-        const nearBest = scored.filter(s => s.score >= bestScore * 0.9);
+        const margin = Math.abs(bestScore) * 0.1;
+        const nearBest = scored.filter(s => s.score >= bestScore - margin);
         if (nearBest.some(s => s.d === me.dir)) return me.dir;
-        return nearBest[Math.floor(Math.random() * nearBest.length)].d;
+        return (nearBest.length ? nearBest : scored)[Math.floor(Math.random() * (nearBest.length || scored.length))].d;
       }
 
       // HARD & IMPOSSIBLE: territory control. Instead of just measuring how much open
