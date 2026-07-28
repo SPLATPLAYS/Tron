@@ -2278,7 +2278,15 @@
         }
         onPhase(msg) {
           if (msg.phase === 'countdown') {
-            this.players.forEach(p => { p.trail = []; p.alive = true; p.boosting = false; });
+            // Initialize guest-side spawn points so clients see each player's starting
+            // cell (host already has these in the sim). This prevents guests from
+            // missing the initial square that can immediately be lethal.
+            const spawns = getSpawnPoints(this.roster.length, this.settings.cols, this.settings.rows);
+            this.players.forEach((p, i) => {
+              const s = spawns[i] || { x: -10, y: -10 };
+              p.trail = [{ x: s.x, y: s.y, boost: false }];
+              p.x = s.x; p.y = s.y; p.alive = true; p.boosting = false;
+            });
             this.roster.forEach(r => updateBoostChip(r.id, BOOST_MAX));
             showOverlay();
             setOverlayText(msg.countdownVal > 0 ? String(msg.countdownVal) : 'GO', 'get ready', '');
