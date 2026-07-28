@@ -14,7 +14,9 @@ const KEY = process.env.PEER_KEY || 'peerjs';
 
 const options = {
     debug: process.env.PEER_DEBUG ? parseInt(process.env.PEER_DEBUG, 10) : 0,
-    path: PATH,
+    // Mount ExpressPeerServer at the app path (app.use(PATH,...)) and use '/' internally
+    // so client path '/peerjs' maps to server endpoint '/peerjs'. Avoid double path.
+    path: '/',
     allow_discovery: false,
     key: KEY,
 };
