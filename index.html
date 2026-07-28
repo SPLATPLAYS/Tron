@@ -2318,6 +2318,28 @@
 
       function peerAvailable() { return typeof Peer !== 'undefined'; }
 
+      // Fetch ICE servers from server-side proxy; fallback to built-in ICE_CONFIG on failure
+      async function fetchIceServers() {
+        try {
+          const r = await fetch('/turn', { cache: 'no-store' });
+          if (r && r.ok) {
+            const data = await r.json();
+            if (Array.isArray(data)) return data; // provider returns iceServers array
+            if (Array.isArray(data.iceServers)) return data.iceServers; // provider wraps
+          }
+        } catch (e) { console.warn('Could not fetch TURN creds, falling back to default ICE config', e); }
+        return ICE_CONFIG.iceServers || ICE_CONFIG;
+      }
+
+      // Default PeerServer host config — change these if you deploy elsewhere
+      const DEFAULT_PEER_CONFIG = {
+        host: 'tron-production-1929.up.railway.app',
+        port: 443,
+        path: (typeof PEER_PATH !== 'undefined') ? PEER_PATH : '/peerjs',
+        secure: true,
+        key: 'peerjs'
+      };
+
       // PeerJS's default config is STUN-only, which fails on many real-world networks
       // (mobile carriers, school/office wifi, symmetric NATs). Add a TURN relay as a fallback
       // so the connection can still succeed when a direct P2P path isn't possible.
@@ -2393,7 +2415,7 @@
       }
 
       // ---- HOST ----
-      function hostCreateRoom(ui, hostName) {
+      async function hostCreateRoom(ui, hostName) {
         if (!peerAvailable()) { $('hostError').textContent = 'Networking library failed to load -- check your connection.'; return; }
         $('hostError').textContent = '';
         const roomCode = generateRoomCode();
@@ -2407,7 +2429,8 @@
           connectFail("Couldn't reach the connection network. Check your internet connection and try again.");
         });
 
-        peer = new Peer(roomCode, { debug: 2, config: ICE_CONFIG });
+        const iceServers = await fetchIceServers();
+        peer = new Peer(roomCode, Object.assign({ debug: 2, config: { iceServers } }, DEFAULT_PEER_CONFIG));
         hostState = {
           ui,
           roster: [{ id: 'p1', color: PALETTE[0], name: sanitizeName(hostName), team: ui.teams ? 'A' : null, isHost: true, ready: true, connected: true, infiniteBoost: ui.infiniteBoosts }],
@@ -2589,7 +2612,7 @@
       }
 
       // ---- GUEST ----
-      function guestJoinRoom(code, name) {
+      async function guestJoinRoom(code, name) {
         if (!peerAvailable()) { $('joinError').textContent = 'Networking library failed to load -- check your connection.'; return; }
         $('joinError').textContent = '';
         const roomCode = code.trim().toUpperCase();
@@ -2606,7 +2629,8 @@
           connectFail("Couldn't reach the connection network. Check your internet connection and try again.");
         });
 
-        peer = new Peer({ debug: 2, config: ICE_CONFIG });
+        const iceServers = await fetchIceServers();
+        peer = new Peer(Object.assign({ debug: 2, config: { iceServers } }, DEFAULT_PEER_CONFIG));
         peer.on('open', () => {
           clearConnectTimeout();
           setConnectStep('network', 'done');
