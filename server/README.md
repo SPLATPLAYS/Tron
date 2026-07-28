@@ -9,7 +9,24 @@ Environment variables
 - `PEER_DEBUG` — set to `1` or `2` for more verbose PeerJS logs
 
 TURN credentials
-This server only provides signaling. For reliable connectivity across restrictive NATs you must provide TURN servers in your clients' `RTCIceServer` list. Use Railway's environment variables to store TURN URL, username, and password and reference them in your client code.
+TURN credentials
+This server only provides signaling. For reliable connectivity across restrictive NATs you must provide TURN servers in your clients' `RTCIceServer` list. Store the TURN provider API key in Railway (recommended env var names: `METERED_API_KEY` or `TURN_API_KEY`) and use the built-in proxy endpoint below so the key is never exposed to browsers.
+
+Server proxy endpoint
+- `GET /turn` — returns the JSON from the TURN provider (an `iceServers` array). The server reads `METERED_API_KEY` or `TURN_API_KEY` from env and forwards the provider response. The result is cached for 60s.
+
+Client usage example
+```js
+// Request iceServers from your PeerServer host (same origin)
+const resp = await fetch('/turn');
+if (!resp.ok) throw new Error('Could not fetch TURN creds');
+const iceServers = await resp.json();
+
+const pc = new RTCPeerConnection({ iceServers });
+```
+
+Environment variable
+- `METERED_API_KEY` (or `TURN_API_KEY`) — the API key for the TURN provider (store this in Railway's Environment variables UI).
 
 Deploy
 1. Push this repo to GitHub and connect to Railway.

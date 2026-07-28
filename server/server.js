@@ -18,6 +18,25 @@ const options = {
 
 app.get('/', (req, res) => res.send('peerjs-server'));
 
+// Proxy endpoint to fetch TURN credentials from a provider using a server-side API key.
+// Store the provider API key in Railway as `METERED_API_KEY` or `TURN_API_KEY`.
+app.get('/turn', async (req, res) => {
+    const key = process.env.METERED_API_KEY || process.env.TURN_API_KEY;
+    if (!key) return res.status(500).json({ error: 'TURN API key not configured on server' });
+    try {
+        const url = `https://trongithub.metered.live/api/v1/turn/credentials?apiKey=${encodeURIComponent(key)}`;
+        const r = await fetch(url);
+        if (!r.ok) return res.status(r.status).json({ error: 'TURN provider returned ' + r.status });
+        const data = await r.json();
+        // short cache to reduce provider calls
+        res.set('Cache-Control', 'public, max-age=60');
+        return res.json(data);
+    } catch (e) {
+        console.error('turn proxy error', e);
+        return res.status(500).json({ error: 'Turn proxy error' });
+    }
+});
+
 const peerServer = ExpressPeerServer(server, options);
 app.use(PATH, peerServer);
 
