@@ -2320,14 +2320,24 @@
 
       // Fetch ICE servers from server-side proxy; fallback to built-in ICE_CONFIG on failure
       async function fetchIceServers() {
-        try {
-          const r = await fetch('/turn', { cache: 'no-store' });
-          if (r && r.ok) {
-            const data = await r.json();
-            if (Array.isArray(data)) return data; // provider returns iceServers array
-            if (Array.isArray(data.iceServers)) return data.iceServers; // provider wraps
+        const tryUrls = [
+          '/turn',
+          // fallback to absolute PeerServer host (use https)
+          (typeof DEFAULT_PEER_CONFIG !== 'undefined' && DEFAULT_PEER_CONFIG.host) ? `https://${DEFAULT_PEER_CONFIG.host}/turn` : null,
+        ].filter(Boolean);
+        for (const url of tryUrls) {
+          try {
+            const r = await fetch(url, { cache: 'no-store' });
+            if (r && r.ok) {
+              const data = await r.json();
+              if (Array.isArray(data)) return data; // provider returns iceServers array
+              if (Array.isArray(data.iceServers)) return data.iceServers; // provider wraps
+            }
+          } catch (e) {
+            console.warn('Could not fetch TURN creds from', url, e);
           }
-        } catch (e) { console.warn('Could not fetch TURN creds, falling back to default ICE config', e); }
+        }
+        console.warn('Falling back to built-in ICE config');
         return ICE_CONFIG.iceServers || ICE_CONFIG;
       }
 

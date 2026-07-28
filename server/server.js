@@ -3,6 +3,9 @@ const express = require('express');
 const http = require('http');
 
 const app = express();
+// Allow cross-origin requests for the /turn proxy and health endpoints
+const cors = require('cors');
+app.use(cors());
 const server = http.createServer(app);
 
 const PORT = process.env.PORT || 9000;
