@@ -1879,18 +1879,20 @@
           grid[idx] = 1; // occupy for the duration of this branch's deeper search
 
           let best = -Infinity;
-          for (const d of Object.keys(DIRS)) {
-            if (d === OPPOSITE[incomingDir]) continue; // can't reverse into your own neck
-            const dd = DIRS[d];
-            let nx = pos.x + dd.x, ny = pos.y + dd.y;
-            if (wallMode === 'wrap') { nx = (nx + cols) % cols; ny = (ny + rows) % rows; }
-            else if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
-            if (grid[ny * cols + nx] === 1) continue;
-            const s = this._deepLookahead({ x: nx, y: ny }, d, me, sim, cols, rows, wallMode, grid, plies - 1);
-            if (s > best) best = s;
+          try {
+            for (const d of Object.keys(DIRS)) {
+              if (d === OPPOSITE[incomingDir]) continue; // can't reverse into your own neck
+              const dd = DIRS[d];
+              let nx = pos.x + dd.x, ny = pos.y + dd.y;
+              if (wallMode === 'wrap') { nx = (nx + cols) % cols; ny = (ny + rows) % rows; }
+              else if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+              if (grid[ny * cols + nx] === 1) continue;
+              const s = this._deepLookahead({ x: nx, y: ny }, d, me, sim, cols, rows, wallMode, grid, plies - 1);
+              if (s > best) best = s;
+            }
+          } finally {
+            grid[idx] = prev; // always restore -- the shared grid must be unchanged for siblings, even on exception
           }
-
-          grid[idx] = prev; // restore -- this branch is done, the shared grid must be unchanged for siblings
           return best === -Infinity ? -9999 : best;
         }
       }
@@ -2417,6 +2419,7 @@
       }
       function connectFail(msg) {
         clearConnectTimeout();
+        if (guestState && guestState._connected) return;
         $('connectSpinner').className = 'connect-spinner failed';
         $('connectError').textContent = msg;
         document.querySelectorAll('#connectSteps .connect-step.active').forEach(el => el.classList.replace('active', 'failed'));
@@ -2479,7 +2482,7 @@
             const pid = 'p' + (idx + 1);
             hostState.roster.push({ id: pid, color: PALETTE[idx], name: 'Player ' + (idx + 1), team, isHost: false, ready: false, connected: true, infiniteBoost: hostState.ui.infiniteBoosts });
             hostState.connections[conn.peer] = { conn, playerId: pid };
-            conn.send({ type: 'welcome', playerId: pid, color: PALETTE[idx] });
+            conn.send({ type: 'welcome', playerId: pid, color: PALETTE[idx], roster: hostState.roster.map(r => ({ id: r.id, color: r.color, name: r.name, team: r.team, ready: r.ready, isHost: r.isHost, isBot: !!r.isBot, connected: r.connected, infiniteBoost: !!r.infiniteBoost })), ui: hostState.ui });
             conn.on('data', (data) => handleHostMessage(pid, data));
             conn.on('close', () => handleGuestDisconnect(pid));
             broadcastLobby();
@@ -2695,7 +2698,9 @@
         if (data.type === 'welcome') {
           clearConnectTimeout();
           setConnectStep('handshake', 'done');
+          guestState._connected = true;
           guestState.playerId = data.playerId; guestState.color = data.color;
+          guestState.roster = data.roster || []; guestState.ui = data.ui || null;
           $('lobbyTitle').textContent = 'LOBBY';
           $('lobbyCodeBox').style.display = 'none';
           $('lobbyReady').style.display = 'inline-block';
@@ -2703,6 +2708,7 @@
           $('hostBotField').style.display = 'none';
           $('hostInfiniteField').style.display = 'none';
           switchScreen('lobby');
+          renderLobbyGuest();
         } else if (data.type === 'full') {
           teardownNetwork();
           switchScreen('joinSetup');
@@ -2971,8 +2977,8 @@
           activeMatch.resetMatch();
         }
       });
+      window.addEventListener('unload', () => { try { teardownNetwork(); } catch (e) { console.error('teardownNetwork error on unload', e); } });
     })();
-    window.addEventListener('unload', () => { try { teardownNetwork(); } catch (e) { console.error('teardownNetwork error on unload', e); } });
   </script>
 </body>
 
