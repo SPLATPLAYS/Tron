@@ -1021,6 +1021,325 @@
       border-radius: 4px;
     }
 
+    /* ---------- Chat ---------- */
+    .chat-wrap {
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 160px;
+      background: var(--panel-bg-soft);
+    }
+
+    .chat-msgs {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 11px;
+    }
+
+    .chat-msg {
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .chat-msg .cname {
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-right: 4px;
+    }
+
+    .chat-msg .ctext {
+      color: var(--text-dim);
+    }
+
+    .chat-msg.system .ctext {
+      color: var(--panel-border-hover);
+      font-style: italic;
+    }
+
+    .chat-input-row {
+      display: flex;
+      border-top: 1px solid var(--panel-border);
+    }
+
+    .chat-input {
+      flex: 1;
+      font-family: 'Space Mono', monospace;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      padding: 8px 12px;
+      font-size: 11px;
+      outline: none;
+    }
+
+    .chat-input::placeholder {
+      color: var(--text-dim);
+      opacity: 0.5;
+    }
+
+    .chat-send {
+      font-family: 'Space Mono', monospace;
+      background: transparent;
+      border: none;
+      border-left: 1px solid var(--panel-border);
+      color: var(--accent-2);
+      padding: 8px 14px;
+      font-size: 11px;
+      cursor: pointer;
+      letter-spacing: 1px;
+    }
+
+    .chat-send:hover {
+      background: rgba(109, 247, 201, 0.08);
+    }
+
+    /* ---------- Public Rooms Browser ---------- */
+    .room-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 340px;
+      overflow-y: auto;
+    }
+
+    .room-list-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--panel-bg-soft);
+      border: 1px solid var(--panel-border);
+      border-radius: 9px;
+      padding: 12px 14px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: border-color 0.12s;
+    }
+
+    .room-list-row:hover {
+      border-color: var(--accent-2);
+    }
+
+    .room-list-row .r-code {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 13px;
+      letter-spacing: 1px;
+      color: var(--accent);
+      min-width: 110px;
+    }
+
+    .room-list-row .r-meta {
+      flex: 1;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .room-list-row .r-tag {
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+    }
+
+    .room-list-row .r-players {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px;
+      color: var(--accent-2);
+      min-width: 50px;
+      text-align: right;
+    }
+
+    .refresh-btn {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      background: transparent;
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 5px 10px;
+      cursor: pointer;
+      align-self: flex-end;
+    }
+
+    .refresh-btn:hover {
+      border-color: var(--accent-2);
+      color: var(--text);
+    }
+
+    .no-rooms {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 12px;
+      padding: 20px;
+    }
+
+    /* ---------- Spectator ---------- */
+    .spec-badge {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 9px;
+      letter-spacing: 1px;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      padding: 2px 6px;
+      margin-left: 4px;
+    }
+
+    .spec-row {
+      opacity: 0.55;
+    }
+
+    .spec-row .spec-label {
+      font-size: 9px;
+      letter-spacing: 1px;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      padding: 1px 4px;
+    }
+
+    /* ---------- Rematch Voting ---------- */
+    .vote-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 8px;
+    }
+
+    .vote-btn {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1px;
+      padding: 8px 16px;
+      border-radius: 7px;
+      cursor: pointer;
+      border: 1px solid var(--panel-border);
+      background: var(--panel-bg-soft);
+      color: var(--text);
+      transition: all 0.12s;
+    }
+
+    .vote-btn:hover {
+      border-color: var(--accent-2);
+    }
+
+    .vote-btn.yes {
+      background: linear-gradient(90deg, rgba(109, 247, 201, 0.2), rgba(23, 230, 255, 0.15));
+      border-color: var(--accent-2);
+    }
+
+    .vote-btn.no {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    .vote-tally {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    /* ---------- Stats / Leaderboard ---------- */
+    .stats-panel {
+      max-width: 700px;
+      width: 90vw;
+    }
+
+    .stats-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .stats-table th {
+      text-align: left;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--panel-border);
+      text-transform: uppercase;
+    }
+
+    .stats-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .stats-table tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .stats-name {
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .stats-num {
+      font-family: 'Orbitron', sans-serif;
+      color: var(--accent-2);
+    }
+
+    .stats-clear {
+      font-size: 10px;
+      color: var(--danger);
+      cursor: pointer;
+      text-align: right;
+      margin-top: 8px;
+      letter-spacing: 1px;
+    }
+
+    .stats-clear:hover {
+      text-decoration: underline;
+    }
+
+    /* ---------- Replay ---------- */
+    .replay-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      max-width: 940px;
+    }
+
+    .replay-bar input[type=range] {
+      flex: 1;
+      accent-color: var(--accent-2);
+    }
+
+    .replay-bar .replay-label {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      min-width: 60px;
+    }
+
+    .replay-bar button {
+      font-family: 'Space Mono', monospace;
+      background: var(--panel-bg-soft);
+      border: 1px solid var(--panel-border);
+      color: var(--text);
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .replay-bar button:hover {
+      border-color: var(--accent-2);
+    }
+
     @media (prefers-reduced-motion: reduce) {
       * {
         animation: none !important;
@@ -1060,6 +1379,8 @@
       </div>
       <div class="menu-footer">Turn 90&deg; only &mdash; no reversing into your own trail.<br>Last rider standing takes
         the round.</div>
+      <button class="btn ghost" id="btnPublicRooms" style="margin-top:-8px;">Browse Public Rooms</button>
+      <button class="btn ghost" id="btnStats" style="margin-top:-4px;">Career Stats</button>
     </div>
 
     <!-- LOCAL SETUP -->
@@ -1101,6 +1422,10 @@
         <div class="field">
           <div class="field-label">Walls</div>
           <div class="segmented" id="localWallMode"></div>
+        </div>
+        <div class="field">
+          <div class="field-label">Game Mode</div>
+          <div class="segmented" id="localGameMode"></div>
         </div>
         <div class="field">
           <div class="toggle-row">
@@ -1176,6 +1501,10 @@
           <div class="segmented" id="hostWallMode"></div>
         </div>
         <div class="field">
+          <div class="field-label">Game Mode</div>
+          <div class="segmented" id="hostGameMode"></div>
+        </div>
+        <div class="field">
           <div class="toggle-row">
             <div class="field-label">Infinite Boosts (starting default)</div>
             <div class="toggle" id="hostInfiniteBoostsToggle">
@@ -1219,7 +1548,31 @@
       </div>
     </div>
 
-    <!-- CONNECTING -->
+    <!-- PUBLIC ROOMS BROWSER -->
+    <div class="screen" id="screen-publicRooms" style="display:none;">
+      <div class="panel">
+        <h2>PUBLIC ROOMS</h2>
+        <button class="refresh-btn" id="btnRefreshRooms">REFRESH</button>
+        <div class="room-list" id="roomList"></div>
+        <div class="no-rooms" id="roomListEmpty">No public rooms online right now.<br>Host one or check back soon.</div>
+        <div class="error-msg" id="roomListError"></div>
+        <div class="btn-row">
+          <button class="btn ghost" id="publicRoomsBack">&larr; Back</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="screen" id="screen-stats" style="display:none;">
+      <div class="panel stats-panel">
+        <h2>CAREER STATS</h2>
+        <table class="stats-table" id="statsTable"></table>
+        <div class="stats-clear" id="statsClear">Clear All Stats</div>
+        <div class="btn-row">
+          <button class="btn ghost" id="statsBack">&larr; Back</button>
+        </div>
+      </div>
+    </div>
     <div class="screen" id="screen-connecting" style="display:none;">
       <div class="panel connecting-panel">
         <h2 id="connectingTitle">CONNECTING</h2>
@@ -1261,6 +1614,13 @@
           </div>
         </div>
         <div class="error-msg" id="lobbyError"></div>
+        <div class="chat-wrap" id="lobbyChatWrap">
+          <div class="chat-msgs" id="lobbyChatMsgs"></div>
+          <div class="chat-input-row">
+            <input class="chat-input" id="lobbyChatInput" maxlength="160" placeholder="type a message..." autocomplete="off">
+            <button class="chat-send" id="lobbyChatSend">SEND</button>
+          </div>
+        </div>
         <div class="btn-row">
           <button class="btn ghost" id="lobbyLeave">&larr; Leave</button>
           <button class="btn primary" id="lobbyReady" style="display:none;">Ready</button>
@@ -1285,6 +1645,20 @@
           </div>
         </div>
         <div class="controls-strip" id="gameControlsStrip"></div>
+        <div class="replay-bar" id="replayBar" style="display:none;">
+          <button id="replayBack">&lt;&lt;</button>
+          <button id="replayPlay">&#9654;</button>
+          <input type="range" id="replaySlider" min="0" max="100" value="0">
+          <span class="replay-label" id="replayLabel">0 / 0</span>
+          <button id="replayFwd">&gt;&gt;</button>
+          <button id="replayClose" class="btn ghost" style="font-size:10px;padding:5px 8px;">Close</button>
+        </div>
+        <div class="vote-row" id="voteRematchRow" style="display:none;">
+          <span style="font-size:10px;color:var(--text-dim);letter-spacing:1px;">Rematch?</span>
+          <button class="vote-btn yes" id="voteRematchYes">YES</button>
+          <button class="vote-btn no" id="voteRematchNo">NO</button>
+          <div class="vote-tally" id="voteTally"></div>
+        </div>
         <button class="btn ghost" id="gameLeave">&larr; Leave Match</button>
       </div>
     </div>
@@ -1292,6 +1666,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
+  <script src="features.js"></script>
   <script>
     (() => {
       'use strict';
@@ -1315,6 +1690,13 @@
       };
       const WIN_SCORES = [3, 5, 7, 10];
       const ROOM_SIZES = [2, 4, 6, 8];
+      const GAME_MODES = [
+        { value: 'classic', label: 'CLASSIC' },
+        { value: 'standard', label: 'STANDARD' },
+        { value: 'shrinking', label: 'SHRINKING' },
+      ];
+      const SHRINK_INTERVAL_TICKS = 30;
+      const SHRINK_AMOUNT = 2;
       const BOT_DIFFICULTY_OPTIONS = [
         { value: 'peaceful', label: 'PEACEFUL' },
         { value: 'easy', label: 'EASY' },
@@ -1538,6 +1920,12 @@
           for (const p of sim.players) {
             if (!p.alive) continue;
             for (const seg of p.trail) grid[seg.y * cols + seg.x] = 1;
+          }
+          if (sim.shrinkTiles && sim.shrinkTiles.size) {
+            for (const key of sim.shrinkTiles) {
+              const [sx, sy] = key.split(',').map(Number);
+              grid[sy * cols + sx] = 1;
+            }
           }
           sim._botGridTick = sim.tick;
           sim._botGrid = grid;
@@ -1922,14 +2310,19 @@
 
       class Simulation {
         constructor(settings, roster) {
-          this.settings = settings; // {cols, rows, wallMode, teams}
+          this.settings = settings; // {cols, rows, wallMode, teams, gameMode}
           this.roster = roster;     // [{id,color,team,name}]
+          this.shrinkTiles = new Set();
+          this._initialCols = settings.cols;
+          this._initialRows = settings.rows;
           this.reset();
         }
         reset() {
           const spawns = getSpawnPoints(this.roster.length, this.settings.cols, this.settings.rows);
           this.players = this.roster.map((r, i) => new Player(r.id, r.color, spawns[i].x, spawns[i].y, spawns[i].dir, r.team, r.name, r.infiniteBoost));
           this.tick = 0; this.over = false; this.winnerId = null; this.winnerTeam = null;
+          this.shrinkTiles.clear();
+          this.shrinkTimer = this.settings.gameMode === 'shrinking' ? SHRINK_INTERVAL_TICKS : -1;
         }
         applyIntent(p, intent) {
           if (!intent) return;
@@ -1956,9 +2349,10 @@
             const np = nextPos[p.id];
             const key = np.x + ',' + np.y;
             const hitsWall = wallMode !== 'wrap' && (np.x < 0 || np.x >= cols || np.y < 0 || np.y >= rows);
+            const hitsShrink = this.shrinkTiles.has(key);
             let hitsTrail = false;
             for (const other of this.players) { if (other.alive && other.occupied.has(key)) { hitsTrail = true; break; } }
-            if (hitsWall || hitsTrail) deaths.add(p.id);
+            if (hitsWall || hitsShrink || hitsTrail) deaths.add(p.id);
             (headCells[key] = headCells[key] || []).push(p.id);
           }
           for (const key in headCells) if (headCells[key].length > 1) headCells[key].forEach(id => deaths.add(id));
@@ -1972,7 +2366,8 @@
           for (const p of this.players) if (p.alive) this.applyIntent(p, intents[p.id]);
           for (const p of this.players) p.addedThisTick = [];
 
-          if (boostRequests) {
+          const classicMode = this.settings.gameMode === 'classic';
+          if (boostRequests && !classicMode) {
             for (const p of this.players) {
               if (!p.alive) continue;
               if (boostRequests[p.id] && p.boostsLeft > 0 && p.boostTicks <= 0) {
@@ -1982,10 +2377,30 @@
             }
           }
 
-          this._movePhase(); // every alive player covers one cell
+          this._movePhase();
           const boosters = this.players.filter(p => p.alive && p.boostTicks > 0);
-          if (boosters.length) this._movePhase(boosters); // boosted players cover a second cell
+          if (boosters.length) this._movePhase(boosters);
           for (const p of this.players) if (p.boostTicks > 0) p.boostTicks--;
+
+          // Shrinking Arena: collapse the outer perimeter every SHRINK_INTERVAL_TICKS
+          if (this.settings.gameMode === 'shrinking' && this.shrinkTimer >= 0) {
+            this.shrinkTimer--;
+            if (this.shrinkTimer <= 0) {
+              this.shrinkTimer = SHRINK_INTERVAL_TICKS;
+              const amount = SHRINK_AMOUNT;
+              const cols = this.settings.cols, rows = this.settings.rows;
+              for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < rows; x++) {
+                  if (x < amount || x >= cols - amount || y < amount || y >= rows - amount) {
+                    this.shrinkTiles.add(x + ',' + y);
+                  }
+                }
+              }
+              for (const p of this.players) {
+                if (p.alive && this.shrinkTiles.has(p.x + ',' + p.y)) p.alive = false;
+              }
+            }
+          }
 
           if (this.settings.teams) {
             const aliveTeams = new Set(this.players.filter(p => p.alive).map(p => p.team));
@@ -2023,6 +2438,13 @@
             ctx.beginPath(); ctx.moveTo(0, y * cs + 0.5); ctx.lineTo(this.canvas.width, y * cs + 0.5); ctx.stroke();
           }
           const DEAD_FADE_MS = 900;
+          if (view.shrinkTiles) {
+            ctx.fillStyle = 'rgba(255,20,50,0.28)';
+            for (const key of view.shrinkTiles) {
+              const [sx, sy] = key.split(',').map(Number);
+              ctx.fillRect(sx * cs + 1, sy * cs + 1, cs - 2, cs - 2);
+            }
+          }
           for (const p of view.players) {
             const dark = darkenHex(p.color, 90);
             let fade = 1;
@@ -2099,7 +2521,42 @@
         $('overlayHint').textContent = hint || '';
       }
       function hudCenterText(settings) {
-        $('hudCenter').textContent = (settings.teams ? 'TEAM MATCH \u2014 ' : '') + 'FIRST TO ' + settings.winScore;
+        const modeLabel = { classic: 'NO BOOSTS', standard: 'STANDARD', shrinking: 'SHRINKING' }[settings.gameMode] || 'STANDARD';
+        $('hudCenter').textContent = (settings.teams ? 'TEAM MATCH \u2014 ' : '') + 'FIRST TO ' + settings.winScore + ' \u00b7 ' + modeLabel;
+      }
+
+      // ===================================================================
+      // ROOM REGISTRATION (keeps room in server's public listing)
+      // ===================================================================
+      let roomRegisterInterval = null;
+      function roomApiUrl() {
+        return 'https://' + DEFAULT_PEER_CONFIG.host;
+      }
+      function registerRoom() {
+        if (!hostState || !hostState.roomCode) return;
+        const players = hostState.roster.filter(r => r.connected);
+        fetch(roomApiUrl() + '/rooms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: hostState.roomCode,
+            playerCount: players.length,
+            maxPlayers: hostState.ui.maxPlayers,
+            hasBots: hostState.roster.some(r => r.isBot),
+            wallMode: hostState.ui.wallMode,
+            speed: hostState.ui.speed,
+            gameMode: hostState.ui.gameMode || 'standard',
+          }),
+        }).catch(() => {});
+        if (!roomRegisterInterval) {
+          roomRegisterInterval = setInterval(registerRoom, 50000);
+        }
+      }
+      function unregisterRoom() {
+        if (roomRegisterInterval) { clearInterval(roomRegisterInterval); roomRegisterInterval = null; }
+        if (hostState && hostState.roomCode) {
+          fetch(roomApiUrl() + '/rooms/' + encodeURIComponent(hostState.roomCode), { method: 'DELETE' }).catch(() => {});
+        }
       }
 
       // ===================================================================
@@ -2132,6 +2589,7 @@
           this.running = true;
           this._lastTime = performance.now();
           this._acc = 0;
+          startReplayRecording();
           this.beginCountdown();
           requestAnimationFrame(this._loop);
         }
@@ -2145,6 +2603,7 @@
           showOverlay();
           setOverlayText(String(this.countdownVal), 'get ready', '');
           this.broadcastPhase();
+          if (!this.onBroadcast) startReplayRecording();
         }
         endRound() {
           this.phase = 'roundover';
@@ -2170,13 +2629,21 @@
           let msg = { type: 'score', score: { ...this.score } };
           if (matchWinner || matchWinnerTeam) {
             this.phase = 'matchover';
+            stopReplayRecording();
             const text = matchWinner ? (matchWinner.name.toUpperCase() + ' WINS') : ('TEAM ' + matchWinnerTeam + ' WINS');
             const color = matchWinner ? matchWinner.color : this.roster.find(r => r.team === matchWinnerTeam).color;
-            setOverlayText(text, 'match complete', 'press R to play again', color);
+            const hint = this.onBroadcast ? 'waiting for host' : 'press R to play again \u00b7 press D to download replay';
+            setOverlayText(text, 'match complete', hint, color);
             msg.phase = 'matchover';
             msg.matchWinnerName = matchWinner ? matchWinner.name : null;
             msg.matchWinnerColor = color;
             msg.matchWinnerTeam = matchWinnerTeam;
+            recordMatchWinners(this.roster, this.score, this.settings);
+            if (this.onBroadcast) {
+              msg.replayAvailable = true;
+              msg.replayFrames = replayFrames;
+              msg.replaySettings = this.settings;
+            }
           } else {
             setOverlayText(this.sim.winnerId ? (this.roster.find(r => r.id === this.sim.winnerId).name.toUpperCase() + ' SCORES') : (this.sim.winnerTeam ? 'TEAM ' + this.sim.winnerTeam + ' SCORES' : 'DRAW'), 'next round in', '');
             this.phaseTimer = 1400;
@@ -2200,6 +2667,7 @@
               boosting: p.boostTicks > 0, boostsLeft: Number.isFinite(p.boostsLeft) ? p.boostsLeft : -1,
               newSegs: p.addedThisTick,
             })),
+            shrinkTiles: this.sim.shrinkTiles.size ? Array.from(this.sim.shrinkTiles) : null,
           });
         }
         broadcastPhase() {
@@ -2230,6 +2698,7 @@
               boosts[r.id] = slot.getBoost ? slot.getBoost() : false;
             });
             this.sim.step(intents, boosts);
+            recordReplayFrame(this.sim);
             this.sim.players.forEach(p => updateBoostChip(p.id, p.boostsLeft));
             this.broadcastFrame();
             if (this.sim.over) this.endRound();
@@ -2262,6 +2731,7 @@
           this.players = roster.map(r => ({ id: r.id, color: r.color, x: -10, y: -10, alive: true, trail: [], boosting: false }));
           this.byId = {}; this.players.forEach(p => this.byId[p.id] = p);
           this.score = {}; roster.forEach(r => this.score[r.id] = 0);
+          this.shrinkTiles = null;
           renderRoster(roster);
           hudCenterText(settings);
           currentView = this;
@@ -2277,6 +2747,7 @@
             }
             if (typeof pd.boostsLeft === 'number') updateBoostChip(pd.id, pd.boostsLeft);
           }
+          if (msg.shrinkTiles) this.shrinkTiles = new Set(msg.shrinkTiles);
         }
         onPhase(msg) {
           if (msg.phase === 'countdown') {
@@ -2380,10 +2851,15 @@
 
       function teardownNetwork() {
         guestSendController.active = false;
+        unregisterRoom();
         if (peer) { try { peer.destroy(); } catch (e) { } peer = null; }
         hostState = null; guestState = null; hostConn = null; clientView = null;
+        spectatorMode = false;
         if (activeMatch) { activeMatch.stop(); activeMatch = null; }
+        closeReplay();
+        clearChat();
         $('hostBotField').style.display = 'none';
+        $('voteRematchRow').style.display = 'none';
         clearConnectTimeout();
       }
 
@@ -2432,7 +2908,7 @@
 
       function fullSettingsFromUi(ui) {
         const b = BOARD_PRESETS[ui.boardSize], s = SPEED_PRESETS[ui.speed];
-        return { cols: b.cols, rows: b.rows, wallMode: ui.wallMode, teams: ui.teams, winScore: ui.winScore, tickMs: s.tickMs };
+        return { cols: b.cols, rows: b.rows, wallMode: ui.wallMode, teams: ui.teams, winScore: ui.winScore, tickMs: s.tickMs, gameMode: ui.gameMode || 'standard' };
       }
 
       // ---- HOST ----
@@ -2460,43 +2936,79 @@
         peer.on('open', (id) => {
           clearConnectTimeout();
           setConnectStep('network', 'done');
+          hostState.roomCode = id;
           $('lobbyTitle').textContent = 'YOUR ROOM';
           $('lobbyCodeBox').style.display = 'flex';
           $('lobbyCode').textContent = id;
           $('lobbyReady').style.display = 'none';
           $('lobbyStart').style.display = 'inline-block';
           $('hostBotField').style.display = 'block';
-          $('hostInfiniteField').style.display = 'block';
+          $('hostInfiniteField').style.display = hostState.ui.gameMode === 'classic' ? 'none' : 'block';
           $('lobbyInfiniteToggle').classList.toggle('on', hostState.ui.infiniteBoosts);
           makeSegmented($('hostBotDifficulty'), BOT_DIFFICULTY_OPTIONS, hostNextBotDifficulty, v => hostNextBotDifficulty = v);
           switchScreen('lobby');
           renderLobbyHost();
+          registerRoom();
         });
         peer.on('error', (err) => { console.error('Peer error (host):', err); $('hostError').textContent = 'Could not create room (' + (err && err.type) + ').'; connectFail('Could not create room (' + (err && err.type) + ').'); });
         peer.on('connection', (conn) => {
+          let firstMessage = true;
           conn.on('open', () => {
-            if (hostState.roster.length >= hostState.ui.maxPlayers) { conn.send({ type: 'full' }); setTimeout(() => conn.close(), 200); return; }
-            const idx = hostState.roster.length;
-            const half = Math.ceil(hostState.ui.maxPlayers / 2);
-            const team = hostState.ui.teams ? (idx < half ? 'A' : 'B') : null;
-            const pid = 'p' + (idx + 1);
-            hostState.roster.push({ id: pid, color: PALETTE[idx], name: 'Player ' + (idx + 1), team, isHost: false, ready: false, connected: true, infiniteBoost: hostState.ui.infiniteBoosts });
-            hostState.connections[conn.peer] = { conn, playerId: pid };
-            conn.send({ type: 'welcome', playerId: pid, color: PALETTE[idx], roster: hostState.roster.map(r => ({ id: r.id, color: r.color, name: r.name, team: r.team, ready: r.ready, isHost: r.isHost, isBot: !!r.isBot, connected: r.connected, infiniteBoost: !!r.infiniteBoost })), ui: hostState.ui });
-            conn.on('data', (data) => handleHostMessage(pid, data));
-            conn.on('close', () => handleGuestDisconnect(pid));
-            broadcastLobby();
-            renderLobbyHost();
+            // Wait for first message to determine if spectator
+          });
+          conn.on('data', (data) => {
+            if (firstMessage && data.type === 'spectator') {
+              firstMessage = false;
+              if (!hostState._spectators) hostState._spectators = {};
+              hostState._spectators[conn.peer] = { conn, name: sanitizeName(data.name) };
+              conn.send({ type: 'welcome', spectator: true, roster: hostState.roster.map(r => ({ id: r.id, color: r.color, name: r.name, team: r.team, ready: r.ready, isHost: r.isHost, isBot: !!r.isBot, connected: r.connected, infiniteBoost: !!r.infiniteBoost })), ui: hostState.ui });
+              addSystemChat(sanitizeName(data.name) + ' is spectating');
+              broadcastLobby();
+              renderLobbyHost();
+              return;
+            }
+            if (firstMessage) {
+              firstMessage = false;
+              if (hostState.roster.length >= hostState.ui.maxPlayers) { conn.send({ type: 'full' }); setTimeout(() => conn.close(), 200); return; }
+              const idx = hostState.roster.length;
+              const half = Math.ceil(hostState.ui.maxPlayers / 2);
+              const team = hostState.ui.teams ? (idx < half ? 'A' : 'B') : null;
+              const pid = 'p' + (idx + 1);
+              hostState.roster.push({ id: pid, color: PALETTE[idx], name: 'Player ' + (idx + 1), team, isHost: false, ready: false, connected: true, infiniteBoost: hostState.ui.infiniteBoosts });
+              hostState.connections[conn.peer] = { conn, playerId: pid };
+              conn.send({ type: 'welcome', playerId: pid, color: PALETTE[idx], roster: hostState.roster.map(r => ({ id: r.id, color: r.color, name: r.name, team: r.team, ready: r.ready, isHost: r.isHost, isBot: !!r.isBot, connected: r.connected, infiniteBoost: !!r.infiniteBoost })), ui: hostState.ui, spectator: false });
+              broadcastLobby();
+              renderLobbyHost();
+              setTimeout(() => addSystemChat('A player joined the room'), 100);
+              return;
+            }
+            const slot = hostState.connections && hostState.connections[conn.peer];
+            const pid = slot ? slot.playerId : null;
+            handleHostMessage(pid, data);
           });
         });
       }
       function handleHostMessage(pid, data) {
+        if (data.type === 'spectator') {
+          const r = hostState.roster.find(r => r.id === pid);
+          if (r) r.name = sanitizeName(data.name);
+          // Spectators don't take a slot; they get frame data passively
+          addSystemChat(sanitizeName(data.name) + ' is spectating');
+          broadcastToAll({ type: 'lobby', roster: hostState.roster.map(r => ({ id: r.id, color: r.color, name: r.name, team: r.team, ready: r.ready, isHost: r.isHost, isBot: !!r.isBot, connected: r.connected, infiniteBoost: !!r.infiniteBoost })), ui: hostState.ui, spectatorCount: (hostState._spectatorCount = (hostState._spectatorCount || 0) + 1) });
+          renderLobbyHost();
+          return;
+        }
         if (data.type === 'input') {
           const slot = hostState.remoteSlots && hostState.remoteSlots[pid];
           if (slot) slot.pending = data.dir;
         } else if (data.type === 'boost') {
           const slot = hostState.remoteSlots && hostState.remoteSlots[pid];
           if (slot) slot.boostPending = true;
+        } else if (data.type === 'chat') {
+          const r = hostState.roster.find(r => r.id === pid);
+          const name = r ? r.name : 'Guest';
+          addChatMessage($('lobbyChatMsgs'), name, data.text);
+          broadcastToAll({ type: 'chat', name: name, text: data.text });
         } else if (data.type === 'ready') {
           const r = hostState.roster.find(r => r.id === pid);
           if (r) { r.ready = !!data.ready; broadcastLobby(); renderLobbyHost(); }
@@ -2506,10 +3018,45 @@
         } else if (data.type === 'infiniteBoost') {
           const r = hostState.roster.find(r => r.id === pid);
           if (r) { r.infiniteBoost = !!data.value; broadcastLobby(); renderLobbyHost(); }
+        } else if (data.type === 'voteRematch') {
+          if (!hostState._rematchVotes) hostState._rematchVotes = {};
+          const r = hostState.roster.find(r => r.id === pid);
+          const name = r ? r.name : 'Guest';
+          hostState._rematchVotes[pid] = { vote: !!data.vote, name };
+          addSystemChat(name + ' voted ' + (data.vote ? 'YES' : 'NO') + ' for rematch');
+          const players = hostState.roster.filter(r => !r.isHost && !r.isBot && r.connected);
+          const allVoted = players.every(r => hostState._rematchVotes[r.id]);
+          if (allVoted) {
+            const yesVotes = Object.values(hostState._rematchVotes).filter(v => v.vote).length;
+            const total = Object.keys(hostState._rematchVotes).length;
+            if (yesVotes > total / 2) {
+              addSystemChat('Rematch passed! (' + yesVotes + '/' + total + ')');
+              broadcastToAll({ type: 'rematchResult', passed: true, yesVotes, total });
+              if (activeMatch) { activeMatch.stop(); activeMatch = null; }
+              closeReplay();
+              setTimeout(() => hostStartMatch(), 300);
+            } else {
+              addSystemChat('Rematch declined (' + yesVotes + '/' + total + ')');
+              broadcastToAll({ type: 'rematchResult', passed: false, yesVotes, total });
+            }
+            hostState._rematchVotes = {};
+          }
         }
       }
       function handleGuestDisconnect(pid) {
         if (!hostState) return;
+        // Check if this was a spectator
+        if (hostState._spectators) {
+          const specKeys = Object.keys(hostState._spectators);
+          for (const k of specKeys) {
+            if (hostState._spectators[k].conn && !hostState._spectators[k].conn.open) {
+              addSystemChat(hostState._spectators[k].name + ' left (spectator)');
+              delete hostState._spectators[k];
+              broadcastLobby(); renderLobbyHost();
+              return;
+            }
+          }
+        }
         const r = hostState.roster.find(r => r.id === pid);
         if (r) r.connected = false;
         if (activeMatch && activeMatch.phase === 'playing') {
@@ -2521,9 +3068,13 @@
       function broadcastToAll(msg) {
         if (!hostState) return;
         Object.values(hostState.connections).forEach(c => { if (c.conn.open) c.conn.send(msg); });
+        if (hostState._spectators) {
+          Object.values(hostState._spectators).forEach(s => { if (s.conn.open) s.conn.send(msg); });
+        }
       }
       function broadcastLobby() {
         broadcastToAll({ type: 'lobby', roster: hostState.roster.map(r => ({ id: r.id, color: r.color, name: r.name, team: r.team, ready: r.ready, isHost: r.isHost, isBot: !!r.isBot, connected: r.connected, infiniteBoost: !!r.infiniteBoost })), ui: hostState.ui });
+        registerRoom();
       }
       function hostAddBot() {
         if (!hostState) return;
@@ -2535,6 +3086,7 @@
         const difficulty = hostNextBotDifficulty;
         const name = botDisplayName(hostState.roster, difficulty);
         hostState.roster.push({ id: pid, color: PALETTE[idx], name, team, isHost: false, isBot: true, difficulty, ready: true, connected: true, infiniteBoost: hostState.ui.infiniteBoosts });
+        addSystemChat('Bot added: ' + name + ' (' + difficulty.toUpperCase() + ')');
         broadcastLobby();
         renderLobbyHost();
       }
@@ -2699,6 +3251,22 @@
           clearConnectTimeout();
           setConnectStep('handshake', 'done');
           guestState._connected = true;
+          if (data.spectator) {
+            spectatorMode = true;
+            guestState.roster = data.roster || [];
+            guestState.ui = data.ui || null;
+            $('lobbyTitle').textContent = 'SPECTATING';
+            $('lobbyCodeBox').style.display = 'none';
+            $('lobbyReady').style.display = 'none';
+            $('lobbyStart').style.display = 'none';
+            $('hostBotField').style.display = 'none';
+            $('hostInfiniteField').style.display = 'none';
+            $('lobbyChatInput').placeholder = 'spectator chat...';
+            switchScreen('lobby');
+            renderLobbyGuest();
+            return;
+          }
+          spectatorMode = false;
           guestState.playerId = data.playerId; guestState.color = data.color;
           guestState.roster = data.roster || []; guestState.ui = data.ui || null;
           $('lobbyTitle').textContent = 'LOBBY';
@@ -2719,16 +3287,43 @@
           renderLobbyGuest();
         } else if (data.type === 'starting') {
           switchScreen('game');
-          setGameControlsStrip('You control: ' + Object.keys(joinOwnScheme).map(d => formatKey(joinOwnScheme[d][0]) + ' ' + d.toUpperCase()).join('  \u00b7  '));
+          if (spectatorMode) {
+            setGameControlsStrip('SPECTATING');
+          } else {
+            setGameControlsStrip('You control: ' + Object.keys(joinOwnScheme).map(d => formatKey(joinOwnScheme[d][0]) + ' ' + d.toUpperCase()).join('  \u00b7  '));
+          }
           renderer.configure(data.settings.cols, data.settings.rows, sizeForCols(data.settings.cols));
           clientView = new ClientView(data.roster, data.settings);
-          guestSendController.active = true;
+          if (!spectatorMode) guestSendController.active = true;
         } else if (data.type === 'phase') {
           if (clientView) clientView.onPhase(data);
         } else if (data.type === 'frame') {
           if (clientView) clientView.onFrame(data);
+        } else if (data.type === 'chat') {
+          if (data.system) {
+            addChatMessage($('lobbyChatMsgs'), data.name || 'SYSTEM', data.text, true);
+          } else {
+            addChatMessage($('lobbyChatMsgs'), data.name || 'Player', data.text);
+          }
+        } else if (data.type === 'rematchResult') {
+          addSystemChat(data.passed ? 'Rematch passed! (' + data.yesVotes + '/' + data.total + ')' : 'Rematch declined (' + data.yesVotes + '/' + data.total + ')');
+          $('voteRematchRow').style.display = 'none';
         } else if (data.type === 'score') {
           if (clientView) clientView.onScore(data);
+          if (data.phase === 'matchover') {
+            $('voteRematchRow').style.display = 'flex';
+            $('voteRematchYes').disabled = false;
+            $('voteRematchNo').disabled = false;
+            $('voteTally').textContent = '';
+            if (data.replayAvailable && data.replayFrames) {
+              replayFrames = data.replayFrames;
+              setTimeout(() => {
+                if (confirm('Match complete! Download replay?')) {
+                  downloadReplay();
+                }
+              }, 500);
+            }
+          }
         }
       }
       function sizeForCols(cols) {
@@ -2794,8 +3389,148 @@
       $('hostBack').addEventListener('click', () => switchScreen('onlineChoice'));
       $('joinBack').addEventListener('click', () => switchScreen('onlineChoice'));
 
+      // ---- PUBLIC ROOMS ----
+      $('btnPublicRooms').addEventListener('click', () => { switchScreen('publicRooms'); refreshRoomList(); });
+      $('publicRoomsBack').addEventListener('click', () => switchScreen('menu'));
+      $('btnRefreshRooms').addEventListener('click', () => refreshRoomList());
+
+      async function refreshRoomList() {
+        const list = $('roomList'); const empty = $('roomListEmpty'); const err = $('roomListError');
+        list.innerHTML = ''; empty.style.display = 'none'; err.textContent = '';
+        try {
+          const baseUrl = 'https://' + DEFAULT_PEER_CONFIG.host;
+          const resp = await fetch(baseUrl + '/rooms');
+          if (!resp.ok) throw new Error('Server returned ' + resp.status);
+          const rooms = await resp.json();
+          if (!rooms.length) { empty.style.display = 'block'; return; }
+          rooms.forEach(r => {
+            const row = document.createElement('div'); row.className = 'room-list-row';
+            const modeLabel = { classic: 'NO BOOSTS', standard: 'STANDARD', shrinking: 'SHRINKING' }[r.gameMode] || 'STANDARD';
+            row.innerHTML =
+              '<span class="r-code">' + escapeHtml(r.code) + '</span>' +
+              '<span class="r-meta">' +
+              '<span class="r-tag">Speed: ' + r.speed.toUpperCase() + '</span>' +
+              '<span class="r-tag">Mode: ' + (r.gameMode || 'standard').toUpperCase() + '</span>' +
+              '<span class="r-tag">' + (r.hasBots ? 'Bots' : 'Humans') + '</span>' +
+              '</span>' +
+              '<span class="r-players">' + r.playerCount + '/' + r.maxPlayers + '</span>';
+            row.addEventListener('click', () => {
+              switchScreen('joinSetup');
+              initJoinSetup();
+              $('joinCode').value = r.code;
+              $('joinCode').dispatchEvent(new Event('input'));
+            });
+            list.appendChild(row);
+          });
+        } catch (e) {
+          err.textContent = 'Could not fetch room list. Is the server online?';
+          empty.style.display = 'block';
+        }
+      }
+
+      // ---- SPECTATOR BUTTON (in online choice) ----
+      // Add a spectator button to the online choice screen
+      (function() {
+        const specBtn = document.createElement('button');
+        specBtn.className = 'choice-card';
+        specBtn.id = 'btnSpectate';
+        specBtn.innerHTML = '<div class="choice-card-title">SPECTATE</div><div class="choice-card-desc">Watch a match without playing. Enter a room code to observe.</div>';
+        specBtn.addEventListener('click', () => {
+          switchScreen('joinSetup');
+          initJoinSetup();
+          spectatorMode = true;
+        });
+        $('screen-onlineChoice').querySelector('.mode-cards').appendChild(specBtn);
+      })();
+
+      // ---- STATS ----
+      $('btnStats').addEventListener('click', () => { switchScreen('stats'); renderStats(); });
+      $('statsBack').addEventListener('click', () => switchScreen('menu'));
+      $('statsClear').addEventListener('click', () => {
+        if (confirm('Delete all career stats? This cannot be undone.')) {
+          clearStats();
+          renderStats();
+        }
+      });
+
+      // ---- CHAT INPUT ----
+      $('lobbyChatSend').addEventListener('click', () => {
+        const input = $('lobbyChatInput');
+        sendChatMessage(input.value);
+        input.value = '';
+      });
+      $('lobbyChatInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const input = $('lobbyChatInput');
+          sendChatMessage(input.value);
+          input.value = '';
+        }
+      });
+
+      // ---- REPLAY CONTROLS ----
+      $('replaySlider').addEventListener('input', () => {
+        const idx = parseInt($('replaySlider').value);
+        renderReplayFrame(idx);
+      });
+      $('replayBack').addEventListener('click', () => {
+        const idx = Math.max(0, replayFrameIdx - 10);
+        $('replaySlider').value = idx;
+        renderReplayFrame(idx);
+      });
+      $('replayFwd').addEventListener('click', () => {
+        const idx = Math.min(replayFrames.length - 1, replayFrameIdx + 10);
+        $('replaySlider').value = idx;
+        renderReplayFrame(idx);
+      });
+      $('replayPlay').addEventListener('click', () => {
+        if (replayPlaying) {
+          replayPlaying = false;
+          $('replayPlay').textContent = '\u25B6';
+          if (replayTimer) clearInterval(replayTimer);
+          return;
+        }
+        replayPlaying = true;
+        $('replayPlay').textContent = '\u275A\u275A';
+        replayTimer = setInterval(() => {
+          if (!replayPlaying || replayFrameIdx >= replayFrames.length - 1) {
+            replayPlaying = false;
+            $('replayPlay').textContent = '\u25B6';
+            if (replayTimer) clearInterval(replayTimer);
+            return;
+          }
+          const next = replayFrameIdx + 1;
+          $('replaySlider').value = next;
+          renderReplayFrame(next);
+        }, 70);
+      });
+      $('replayClose').addEventListener('click', () => {
+        closeReplay();
+        switchScreen('menu');
+      });
+
+      // ---- REMATCH VOTING ----
+      $('voteRematchYes').addEventListener('click', () => {
+        if (hostConn && hostConn.open) {
+          hostConn.send({ type: 'voteRematch', vote: true });
+          $('voteRematchYes').disabled = true;
+          $('voteRematchNo').disabled = true;
+          $('voteTally').textContent = 'You voted YES';
+        }
+      });
+      $('voteRematchNo').addEventListener('click', () => {
+        if (hostConn && hostConn.open) {
+          hostConn.send({ type: 'voteRematch', vote: false });
+          $('voteRematchYes').disabled = true;
+          $('voteRematchNo').disabled = true;
+          $('voteTally').textContent = 'You voted NO';
+        }
+      });
+
+      // ---- REPLAY DOWNLOAD (for local matches, via R key) ----
+
       // ---- LOCAL SETUP ----
-      const localUi = { count: 2, teams: false, boardSize: 'medium', speed: 'normal', winScore: 5, wallMode: 'solid', infiniteBoosts: false };
+      const localUi = { count: 2, teams: false, boardSize: 'medium', speed: 'normal', winScore: 5, wallMode: 'solid', gameMode: 'standard', infiniteBoosts: false };
       function initLocalSetup() {
         renderLocalPlayersPreview();
         renderLocalControls();
@@ -2803,6 +3538,11 @@
         makeSegmented($('localSpeed'), speedOptions(), localUi.speed, v => localUi.speed = v);
         makeSegmented($('localWinScore'), scoreOptions(), localUi.winScore, v => localUi.winScore = v);
         makeSegmented($('localWallMode'), wallOptions(), localUi.wallMode, v => localUi.wallMode = v);
+        makeSegmented($('localGameMode'), GAME_MODES, localUi.gameMode, v => {
+          localUi.gameMode = v;
+          const classic = v === 'classic';
+          $('localInfiniteBoostsToggle').parentElement.parentElement.style.display = classic ? 'none' : 'block';
+        });
         $('localInfiniteBoostsToggle').classList.toggle('on', localUi.infiniteBoosts);
       }
       function renderLocalPlayersPreview() {
@@ -2918,7 +3658,7 @@
       });
 
       // ---- HOST SETUP ----
-      const hostUi = { maxPlayers: 2, teams: false, boardSize: 'medium', speed: 'normal', winScore: 5, wallMode: 'solid', infiniteBoosts: false };
+      const hostUi = { maxPlayers: 2, teams: false, boardSize: 'medium', speed: 'normal', winScore: 5, wallMode: 'solid', gameMode: 'standard', infiniteBoosts: false };
       function initHostSetup() {
         makeSegmented($('hostRoomSize'), ROOM_SIZES.map(n => ({ value: n, label: n })), hostUi.maxPlayers, v => { hostUi.maxPlayers = v; $('hostTeamsField').style.display = v >= 4 ? 'block' : 'none'; if (v < 4) hostUi.teams = false, $('hostTeamsToggle').classList.remove('on'); });
         $('hostTeamsField').style.display = hostUi.maxPlayers >= 4 ? 'block' : 'none';
@@ -2926,6 +3666,11 @@
         makeSegmented($('hostSpeed'), speedOptions(), hostUi.speed, v => hostUi.speed = v);
         makeSegmented($('hostWinScore'), scoreOptions(), hostUi.winScore, v => hostUi.winScore = v);
         makeSegmented($('hostWallMode'), wallOptions(), hostUi.wallMode, v => hostUi.wallMode = v);
+        makeSegmented($('hostGameMode'), GAME_MODES, hostUi.gameMode, v => {
+          hostUi.gameMode = v;
+          const classic = v === 'classic';
+          $('hostInfiniteBoostsToggle').parentElement.parentElement.style.display = classic ? 'none' : 'block';
+        });
         $('hostInfiniteBoostsToggle').classList.toggle('on', hostUi.infiniteBoosts);
         renderControlEditor($('hostControlsEditor'), hostOwnScheme, (dir, key) => {
           for (const d of ['up', 'down', 'left', 'right', 'boost']) { if (d !== dir && hostOwnScheme[d][0] === key) return true; }
@@ -2946,7 +3691,11 @@
       $('joinConnect').addEventListener('click', () => {
         const code = $('joinCode').value.trim();
         if (!code) { $('joinError').textContent = 'Enter a room code.'; return; }
-        guestJoinRoom(code, $('joinName').value);
+        if (spectatorMode) {
+          guestJoinAsSpectator(code, $('joinName').value);
+        } else {
+          guestJoinRoom(code, $('joinName').value);
+        }
       });
 
       // ---- LOBBY ----
@@ -2969,15 +3718,30 @@
         if (activeMatch) { activeMatch.stop(); activeMatch = null; }
         currentView = null;
         destroyActiveControllers();
+        closeReplay();
         teardownNetwork();
         switchScreen('menu');
       });
       window.addEventListener('keydown', (e) => {
-        if (e.key.toLowerCase() === 'r' && $('screen-game').style.display !== 'none' && activeMatch && !hostConn) {
+        const key = e.key.toLowerCase();
+        if (key === 'r' && $('screen-game').style.display !== 'none' && activeMatch && !hostConn) {
           activeMatch.resetMatch();
+        }
+        if (key === 'd' && $('screen-game').style.display !== 'none' && activeMatch && activeMatch.phase === 'matchover' && !hostConn) {
+          downloadReplay();
         }
       });
       window.addEventListener('unload', () => { try { teardownNetwork(); } catch (e) { console.error('teardownNetwork error on unload', e); } });
+
+      // ---- DRAG-AND-DROP REPLAY LOADING ----
+      document.addEventListener('dragover', (e) => { e.preventDefault(); });
+      document.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const file = e.dataTransfer && e.dataTransfer.files[0];
+        if (file && file.name.endsWith('.json')) {
+          loadReplayFromFile(file);
+        }
+      });
     })();
   </script>
 </body>
