@@ -35,7 +35,8 @@ const roomRegisterLimiter = rateLimit({
 // Rooms expire after 90s if not refreshed (clients should POST every 60s).
 // ===================================================================
 const rooms = new Map();
-const ROOM_TTL_MS = 90_000;
+const ROOM_TTL_MS = 30_000;
+const ROOM_CLEAN_INTERVAL_MS = 10_000;
 
 function cleanRooms() {
     const now = Date.now();
@@ -44,7 +45,7 @@ function cleanRooms() {
     }
 }
 
-setInterval(cleanRooms, 30_000);
+setInterval(cleanRooms, ROOM_CLEAN_INTERVAL_MS);
 
 app.post('/rooms', roomRegisterLimiter, express.json(), (req, res) => {
     const { code, playerCount, maxPlayers, hasBots, wallMode, speed, gameMode } = req.body || {};

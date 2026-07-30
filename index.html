@@ -2548,13 +2548,13 @@
           }),
         }).catch(() => {});
         if (!roomRegisterInterval) {
-          roomRegisterInterval = setInterval(registerRoom, 50000);
+          roomRegisterInterval = setInterval(registerRoom, 20000);
         }
       }
       function unregisterRoom() {
         if (roomRegisterInterval) { clearInterval(roomRegisterInterval); roomRegisterInterval = null; }
         if (hostState && hostState.roomCode) {
-          fetch(roomApiUrl() + '/rooms/' + encodeURIComponent(hostState.roomCode), { method: 'DELETE' }).catch(() => {});
+          fetch(roomApiUrl() + '/rooms/' + encodeURIComponent(hostState.roomCode), { method: 'DELETE', keepalive: true }).catch(() => {});
         }
       }
 
@@ -3731,7 +3731,12 @@
           downloadReplay();
         }
       });
-      window.addEventListener('unload', () => { try { teardownNetwork(); } catch (e) { console.error('teardownNetwork error on unload', e); } });
+      window.addEventListener('beforeunload', () => {
+        if (hostState && hostState.roomCode) {
+          const url = roomApiUrl() + '/rooms/' + encodeURIComponent(hostState.roomCode);
+          fetch(url, { method: 'DELETE', keepalive: true }).catch(() => {});
+        }
+      });
 
       // ---- DRAG-AND-DROP REPLAY LOADING ----
       document.addEventListener('dragover', (e) => { e.preventDefault(); });
