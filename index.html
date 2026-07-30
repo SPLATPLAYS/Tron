@@ -3006,7 +3006,12 @@
           if (slot) slot.boostPending = true;
         } else if (data.type === 'chat') {
           const r = hostState.roster.find(r => r.id === pid);
-          const name = r ? r.name : 'Guest';
+          let name = r ? r.name : null;
+          if (!name && hostState._spectators) {
+            const specEntry = Object.values(hostState._spectators).find(s => s.conn && s.conn.peer === pid);
+            if (specEntry) name = specEntry.name;
+          }
+          if (!name) name = 'Guest';
           addChatMessage($('lobbyChatMsgs'), name, data.text);
           broadcastToAll({ type: 'chat', name: name, text: data.text });
         } else if (data.type === 'ready') {
@@ -3925,7 +3930,6 @@
           addChatMessage($('lobbyChatMsgs'), name, text);
           broadcastToAll({ type: 'chat', name: name, text: text });
         } else if (hostConn && hostConn.open) {
-          addChatMessage($('lobbyChatMsgs'), 'You', text);
           hostConn.send({ type: 'chat', text: text });
         }
       }
