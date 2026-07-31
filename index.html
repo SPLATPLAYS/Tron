@@ -3093,9 +3093,15 @@
         }
         if (hostState._mutedPlayers) hostState._mutedPlayers.delete(pid);
         delete hostState.remoteSlots[pid];
-        if (activeMatch && activeMatch.phase === 'playing') {
-          const sp = activeMatch.sim.players.find(p => p.id === pid);
-          if (sp) sp.alive = false;
+        if (activeMatch) {
+          if (activeMatch.phase === 'playing') {
+            const sp = activeMatch.sim.players.find(p => p.id === pid);
+            if (sp) sp.alive = false;
+          }
+          activeMatch.roster = activeMatch.roster.filter(r => r.id !== pid);
+          delete activeMatch.slots[pid];
+          delete activeMatch.score[pid];
+          renderRoster(activeMatch.roster);
         }
         broadcastLobby(); renderLobbyHost();
       }
