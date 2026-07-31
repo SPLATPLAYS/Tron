@@ -587,6 +587,14 @@
     .lobby-row .lname {
       flex: 1;
     }
+    .lobby-row .lname.editable-name {
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-style: dotted;
+    }
+    .lobby-row .lname.editable-name:hover {
+      color: var(--accent);
+    }
 
     .lobby-row .ltag {
       font-size: 10px;
@@ -1381,6 +1389,8 @@
         the round.</div>
       <button class="btn ghost" id="btnPublicRooms" style="margin-top:-8px;">Browse Public Rooms</button>
       <button class="btn ghost" id="btnStats" style="margin-top:-4px;">Career Stats</button>
+      <button class="btn ghost" id="btnLoadReplay" style="margin-top:-4px;">Load Replay</button>
+      <input type="file" id="replayFileInput" accept=".json" style="display:none;">
     </div>
 
     <!-- LOCAL SETUP -->
@@ -1642,6 +1652,7 @@
             <div class="big" id="overlayBig">3</div>
             <div class="small" id="overlaySmall">get ready</div>
             <div class="hint" id="overlayHint"></div>
+            <button class="btn ghost" id="overlayDownloadBtn" style="display:none;margin-top:12px;">Download Replay</button>
           </div>
         </div>
         <div class="controls-strip" id="gameControlsStrip"></div>
@@ -1898,9 +1909,9 @@
       const BOT_DIFFICULTIES = ['peaceful', 'easy', 'medium', 'hard', 'impossible'];
       // How many of its own future moves an IMPOSSIBLE bot plays out before scoring a
       // candidate. Branching is at most 3 (no reversing), so cost is ~3^plies leaf
-      // evaluations per candidate -- 5 is deep enough to see well past most self-trap
-      // sequences while staying cheap (a few hundred cheap BFS calls per bot per tick).
-      const IMPOSSIBLE_LOOKAHEAD_PLIES = 5;
+      // evaluations per candidate -- 8 is deep enough to see past self-trap
+      // sequences on wrapped boards while staying performant.
+      const IMPOSSIBLE_LOOKAHEAD_PLIES = 8;
 
       class BotController {
         constructor(playerId, difficulty) {
@@ -2075,7 +2086,9 @@
           let best = scored[0], bestAdjusted = -Infinity;
           for (const cand of scored) {
             const np = landingFrom(me.x, me.y, cand.d);
-            const lookahead = np ? this._deepLookahead(np, cand.d, me, sim, cols, rows, wallMode, grid, IMPOSSIBLE_LOOKAHEAD_PLIES) : -Infinity;
+            if (!np) continue;
+            if (me.occupied.has(np.x + ',' + np.y)) continue;
+            const lookahead = this._deepLookahead(np, cand.d, me, sim, cols, rows, wallMode, grid, IMPOSSIBLE_LOOKAHEAD_PLIES);
             if (lookahead > bestAdjusted) { bestAdjusted = lookahead; best = cand; }
           }
           return best.d;
@@ -2274,6 +2287,7 @@
               if (wallMode === 'wrap') { nx = (nx + cols) % cols; ny = (ny + rows) % rows; }
               else if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
               if (grid[ny * cols + nx] === 1) continue;
+              if (me.occupied && me.occupied.has(nx + ',' + ny)) continue;
               const s = this._deepLookahead({ x: nx, y: ny }, d, me, sim, cols, rows, wallMode, grid, plies - 1);
               if (s > best) best = s;
             }
@@ -2512,7 +2526,7 @@
         [...el.children].forEach((dot, i) => dot.classList.toggle('filled', i < left));
       }
       function showOverlay() { $('overlay').style.display = 'flex'; }
-      function hideOverlay() { $('overlay').style.display = 'none'; }
+      function hideOverlay() { $('overlay').style.display = 'none'; $('overlayDownloadBtn').style.display = 'none'; }
       function setOverlayText(big, small, hint, color) {
         $('overlayBig').textContent = big;
         $('overlayBig').style.color = color || '';
@@ -2631,8 +2645,9 @@
             stopReplayRecording();
             const text = matchWinner ? (matchWinner.name.toUpperCase() + ' WINS') : ('TEAM ' + matchWinnerTeam + ' WINS');
             const color = matchWinner ? matchWinner.color : this.roster.find(r => r.team === matchWinnerTeam).color;
-            const hint = this.onBroadcast ? 'waiting for host' : 'press R to play again \u00b7 press D to download replay';
+            const hint = this.onBroadcast ? 'press R to restart \u00b7 press D to download replay' : 'press R to play again \u00b7 press D to download replay';
             setOverlayText(text, 'match complete', hint, color);
+            $('overlayDownloadBtn').style.display = 'inline-block';
             msg.phase = 'matchover';
             msg.matchWinnerName = matchWinner ? matchWinner.name : null;
             msg.matchWinnerColor = color;
@@ -2932,6 +2947,7 @@
           ui,
           roster: [{ id: 'p1', color: PALETTE[0], name: sanitizeName(hostName), team: ui.teams ? 'A' : null, isHost: true, ready: true, connected: true, infiniteBoost: ui.infiniteBoosts }],
           connections: {},
+          _mutedPlayers: new Set(),
         };
         peer.on('open', (id) => {
           clearConnectTimeout();
@@ -3012,8 +3028,13 @@
             if (specEntry) name = specEntry.name;
           }
           if (!name) name = 'Guest';
-          addChatMessage($('lobbyChatMsgs'), name, data.text);
-          broadcastToAll({ type: 'chat', name: name, text: data.text });
+          const isMuted = pid && hostState._mutedPlayers && hostState._mutedPlayers.has(pid);
+          if (isMuted) {
+            addChatMessage($('lobbyChatMsgs'), name + ' (muted)', data.text);
+          } else {
+            addChatMessage($('lobbyChatMsgs'), name, data.text);
+            broadcastToAll({ type: 'chat', name: name, text: data.text });
+          }
         } else if (data.type === 'ready') {
           const r = hostState.roster.find(r => r.id === pid);
           if (r) { r.ready = !!data.ready; broadcastLobby(); renderLobbyHost(); }
@@ -3022,7 +3043,7 @@
           if (r) { r.name = sanitizeName(data.name); broadcastLobby(); renderLobbyHost(); }
         } else if (data.type === 'infiniteBoost') {
           const r = hostState.roster.find(r => r.id === pid);
-          if (r) { r.infiniteBoost = !!data.value; broadcastLobby(); renderLobbyHost(); }
+          if (r && r.isHost) { r.infiniteBoost = !!data.value; broadcastLobby(); renderLobbyHost(); }
         } else if (data.type === 'voteRematch') {
           if (!hostState._rematchVotes) hostState._rematchVotes = {};
           const r = hostState.roster.find(r => r.id === pid);
@@ -3034,23 +3055,14 @@
           if (allVoted) {
             const yesVotes = Object.values(hostState._rematchVotes).filter(v => v.vote).length;
             const total = Object.keys(hostState._rematchVotes).length;
-            if (yesVotes > total / 2) {
-              addSystemChat('Rematch passed! (' + yesVotes + '/' + total + ')');
-              broadcastToAll({ type: 'rematchResult', passed: true, yesVotes, total });
-              if (activeMatch) { activeMatch.stop(); activeMatch = null; }
-              closeReplay();
-              setTimeout(() => hostStartMatch(), 300);
-            } else {
-              addSystemChat('Rematch declined (' + yesVotes + '/' + total + ')');
-              broadcastToAll({ type: 'rematchResult', passed: false, yesVotes, total });
-            }
+            addSystemChat('All votes in: ' + yesVotes + ' YES / ' + total + ' total. Host can restart.');
+            broadcastToAll({ type: 'rematchResult', passed: true, yesVotes, total, advisory: true });
             hostState._rematchVotes = {};
           }
         }
       }
       function handleGuestDisconnect(pid) {
         if (!hostState) return;
-        // Check if this was a spectator
         if (hostState._spectators) {
           const specKeys = Object.keys(hostState._spectators);
           for (const k of specKeys) {
@@ -3063,7 +3075,14 @@
           }
         }
         const r = hostState.roster.find(r => r.id === pid);
-        if (r) r.connected = false;
+        if (!r) return;
+        addSystemChat(r.name + ' left the game');
+        hostState.roster = hostState.roster.filter(r => r.id !== pid);
+        for (const k of Object.keys(hostState.connections)) {
+          if (hostState.connections[k].playerId === pid) { delete hostState.connections[k]; break; }
+        }
+        if (hostState._mutedPlayers) hostState._mutedPlayers.delete(pid);
+        delete hostState.remoteSlots[pid];
         if (activeMatch && activeMatch.phase === 'playing') {
           const sp = activeMatch.sim.players.find(p => p.id === pid);
           if (sp) sp.alive = false;
@@ -3092,6 +3111,38 @@
         const name = botDisplayName(hostState.roster, difficulty);
         hostState.roster.push({ id: pid, color: PALETTE[idx], name, team, isHost: false, isBot: true, difficulty, ready: true, connected: true, infiniteBoost: hostState.ui.infiniteBoosts });
         addSystemChat('Bot added: ' + name + ' (' + difficulty.toUpperCase() + ')');
+        broadcastLobby();
+        renderLobbyHost();
+      }
+      function hostToggleMute(id) {
+        if (!hostState) return;
+        if (hostState._mutedPlayers.has(id)) {
+          hostState._mutedPlayers.delete(id);
+        } else {
+          hostState._mutedPlayers.add(id);
+        }
+        renderLobbyHost();
+      }
+      function hostKickPlayer(id) {
+        if (!hostState) return;
+        const r = hostState.roster.find(r => r.id === id);
+        if (!r || r.isHost || r.isBot) return;
+        for (const k of Object.keys(hostState.connections)) {
+          if (hostState.connections[k].playerId === id) {
+            try { hostState.connections[k].conn.send({ type: 'kicked' }); } catch(e) {}
+            hostState.connections[k].conn.close();
+            delete hostState.connections[k];
+            break;
+          }
+        }
+        hostState.roster = hostState.roster.filter(r => r.id !== id);
+        delete hostState.remoteSlots[id];
+        if (hostState._mutedPlayers) hostState._mutedPlayers.delete(id);
+        if (activeMatch && activeMatch.phase === 'playing') {
+          const sp = activeMatch.sim.players.find(p => p.id === id);
+          if (sp) sp.alive = false;
+        }
+        addSystemChat('Kicked ' + r.name);
         broadcastLobby();
         renderLobbyHost();
       }
@@ -3139,16 +3190,20 @@
         const list = $('lobbyList'); list.innerHTML = '';
         hostState.roster.forEach(r => {
           const row = document.createElement('div'); row.className = 'lobby-row';
-          const infPart = (r.isHost || r.isBot)
+          const infPart = (hostState.ui.gameMode === 'classic')
+            ? ''
+            : ((r.isHost || r.isBot)
             ? '<button type="button" class="mini-btn inf-toggle' + (r.infiniteBoost ? ' on' : '') + '" data-inf-toggle="' + r.id + '">INF ' + (r.infiniteBoost ? 'ON' : 'OFF') + '</button>'
-            : '<span class="ready-pip ' + (r.infiniteBoost ? 'yes' : 'no') + '">INF ' + (r.infiniteBoost ? 'ON' : 'OFF') + '</span>';
+            : '<span class="ready-pip ' + (r.infiniteBoost ? 'yes' : 'no') + '">INF ' + (r.infiniteBoost ? 'ON' : 'OFF') + '</span>');
           const right = r.isBot
             ? '<button type="button" class="mini-btn diff-' + r.difficulty + '" data-bot-diff="' + r.id + '">' + r.difficulty.toUpperCase() + '</button>' +
             infPart +
             '<button type="button" class="mini-btn danger" data-bot-remove="' + r.id + '">REMOVE</button>'
-            : '<span class="ready-pip ' + (r.isHost || r.ready ? 'yes' : 'no') + '">' + (r.isHost ? 'HOST' : (r.ready ? 'READY' : 'WAITING')) + '</span>' + infPart;
+            : (r.isHost
+              ? '<span class="ready-pip yes">HOST</span>' + infPart
+              : '<span class="ready-pip ' + (r.ready ? 'yes' : 'no') + '">' + (r.ready ? 'READY' : 'WAITING') + '</span>' + infPart + '<button type="button" class="mini-btn ' + (hostState._mutedPlayers && hostState._mutedPlayers.has(r.id) ? 'danger' : '') + '" data-mute="' + r.id + '">' + (hostState._mutedPlayers && hostState._mutedPlayers.has(r.id) ? 'UNMUTE' : 'MUTE') + '</button>' + '<button type="button" class="mini-btn danger" data-kick="' + r.id + '">KICK</button>');
           row.innerHTML = '<span class="dot" style="background:' + r.color + ';box-shadow:0 0 6px ' + r.color + '"></span>' +
-            '<span class="lname">' + escapeHtml(r.name) + (r.isHost ? ' (host)' : '') + (r.isBot ? ' (bot)' : '') + '</span>' +
+            '<span class="lname' + (r.isHost ? ' editable-name' : '') + '"' + (r.isHost ? ' data-changename title="Click to change name"' : '') + '>' + escapeHtml(r.name) + (r.isHost ? ' (host)' : '') + (r.isBot ? ' (bot)' : '') + '</span>' +
             (r.team ? '<span class="ltag">TEAM ' + r.team + '</span>' : '') +
             right;
           list.appendChild(row);
@@ -3156,6 +3211,14 @@
         list.querySelectorAll('[data-bot-diff]').forEach(btn => btn.addEventListener('click', () => hostCycleBotDifficulty(btn.getAttribute('data-bot-diff'))));
         list.querySelectorAll('[data-bot-remove]').forEach(btn => btn.addEventListener('click', () => hostRemoveBot(btn.getAttribute('data-bot-remove'))));
         list.querySelectorAll('[data-inf-toggle]').forEach(btn => btn.addEventListener('click', () => hostToggleInfiniteBoost(btn.getAttribute('data-inf-toggle'))));
+        list.querySelectorAll('[data-kick]').forEach(btn => btn.addEventListener('click', () => hostKickPlayer(btn.getAttribute('data-kick'))));
+        list.querySelectorAll('[data-mute]').forEach(btn => btn.addEventListener('click', () => hostToggleMute(btn.getAttribute('data-mute'))));
+        list.querySelectorAll('[data-changename]').forEach(el => el.addEventListener('click', () => {
+          const r = hostState.roster.find(r => r.isHost);
+          if (!r) return;
+          const newName = prompt('Enter new name:', r.name);
+          if (newName) { r.name = sanitizeName(newName); broadcastLobby(); renderLobbyHost(); }
+        }));
         const allReady = hostState.roster.every(r => r.isHost || r.isBot || r.ready);
         $('lobbyStart').disabled = !allReady || hostState.roster.length < 2;
         $('hostAddBot').disabled = hostState.roster.length >= hostState.ui.maxPlayers;
@@ -3287,6 +3350,15 @@
           switchScreen('joinSetup');
           initJoinSetup();
           $('joinError').textContent = 'That room is full.';
+        } else if (data.type === 'kicked') {
+          if (activeMatch) { activeMatch.stop(); activeMatch = null; }
+          currentView = null;
+          destroyActiveControllers();
+          closeReplay();
+          teardownNetwork();
+          switchScreen('joinSetup');
+          initJoinSetup();
+          $('joinError').textContent = 'You were kicked by the host.';
         } else if (data.type === 'lobby') {
           guestState.roster = data.roster; guestState.ui = data.ui;
           renderLobbyGuest();
@@ -3311,8 +3383,11 @@
             addChatMessage($('lobbyChatMsgs'), data.name || 'Player', data.text);
           }
         } else if (data.type === 'rematchResult') {
-          addSystemChat(data.passed ? 'Rematch passed! (' + data.yesVotes + '/' + data.total + ')' : 'Rematch declined (' + data.yesVotes + '/' + data.total + ')');
           $('voteRematchRow').style.display = 'none';
+          if (data.advisory) {
+            $('voteTally').textContent = 'Votes: ' + data.yesVotes + '/' + data.total + ' YES - Waiting for host...';
+            $('voteTally').style.display = 'inline';
+          }
         } else if (data.type === 'score') {
           if (clientView) clientView.onScore(data);
           if (data.phase === 'matchover') {
@@ -3338,23 +3413,26 @@
       }
       function renderLobbyGuest() {
         const list = $('lobbyList'); list.innerHTML = '';
+        const classic = guestState.ui && guestState.ui.gameMode === 'classic';
         guestState.roster.forEach(r => {
           const row = document.createElement('div'); row.className = 'lobby-row';
           const isMe = r.id === guestState.playerId;
-          const infPart = isMe
-            ? '<button type="button" class="mini-btn inf-toggle' + (r.infiniteBoost ? ' on' : '') + '" data-inf-self>INF ' + (r.infiniteBoost ? 'ON' : 'OFF') + '</button>'
+          const infPart = classic
+            ? ''
             : '<span class="ready-pip ' + (r.infiniteBoost ? 'yes' : 'no') + '">INF ' + (r.infiniteBoost ? 'ON' : 'OFF') + '</span>';
           row.innerHTML = '<span class="dot" style="background:' + r.color + ';box-shadow:0 0 6px ' + r.color + '"></span>' +
-            '<span class="lname">' + escapeHtml(r.name) + (r.isHost ? ' (host)' : '') + (r.isBot ? ' (bot)' : '') + (isMe ? ' (you)' : '') + '</span>' +
+            '<span class="lname' + (isMe ? ' editable-name' : '') + '"' + (isMe ? ' data-changename title="Click to change name"' : '') + '>' + escapeHtml(r.name) + (r.isHost ? ' (host)' : '') + (r.isBot ? ' (bot)' : '') + (isMe ? ' (you)' : '') + '</span>' +
             (r.team ? '<span class="ltag">TEAM ' + r.team + '</span>' : '') +
             '<span class="ready-pip ' + (r.isHost || r.isBot || r.ready ? 'yes' : 'no') + '">' + (r.isHost ? 'HOST' : (r.isBot ? 'BOT' : (r.ready ? 'READY' : 'WAITING'))) + '</span>' +
             infPart;
           list.appendChild(row);
         });
-        list.querySelectorAll('[data-inf-self]').forEach(btn => btn.addEventListener('click', () => {
-          const mine = guestState.roster.find(r => r.id === guestState.playerId);
-          const next = !(mine && mine.infiniteBoost);
-          if (hostConn && hostConn.open) hostConn.send({ type: 'infiniteBoost', value: next });
+        list.querySelectorAll('[data-changename]').forEach(el => el.addEventListener('click', () => {
+          const newName = prompt('Enter new name:', guestState.name);
+          if (newName) {
+            guestState.name = sanitizeName(newName);
+            if (hostConn && hostConn.open) hostConn.send({ type: 'name', name: sanitizeName(newName) });
+          }
         }));
       }
       function setGameControlsStrip(text) { $('gameControlsStrip').textContent = text; }
@@ -3447,6 +3525,16 @@
         });
         $('screen-onlineChoice').querySelector('.mode-cards').appendChild(specBtn);
       })();
+
+      // ---- REPLAY LOAD/SAVE BUTTONS ----
+      $('btnLoadReplay').addEventListener('click', () => { $('replayFileInput').click(); });
+      $('replayFileInput').addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          loadReplayFromFile(e.target.files[0]);
+          e.target.value = '';
+        }
+      });
+      $('overlayDownloadBtn').addEventListener('click', () => downloadReplay());
 
       // ---- STATS ----
       $('btnStats').addEventListener('click', () => { switchScreen('stats'); renderStats(); });
@@ -3592,15 +3680,17 @@
           botRow.appendChild(botLabel); botRow.appendChild(botToggle);
           block.appendChild(botRow);
 
-          const infRow = document.createElement('div');
-          infRow.className = 'toggle-row'; infRow.style.marginBottom = '10px';
-          const infLabel = document.createElement('div'); infLabel.className = 'field-label'; infLabel.textContent = 'INFINITE BOOST';
-          const infToggle = document.createElement('div');
-          infToggle.className = 'toggle' + (localInfiniteBoostFlags[i] ? ' on' : '');
-          infToggle.innerHTML = '<div class="knob"></div>';
-          infToggle.addEventListener('click', () => { localInfiniteBoostFlags[i] = !localInfiniteBoostFlags[i]; renderLocalControls(); });
-          infRow.appendChild(infLabel); infRow.appendChild(infToggle);
-          block.appendChild(infRow);
+          if (localUi.gameMode !== 'classic') {
+            const infRow = document.createElement('div');
+            infRow.className = 'toggle-row'; infRow.style.marginBottom = '10px';
+            const infLabel = document.createElement('div'); infLabel.className = 'field-label'; infLabel.textContent = 'INFINITE BOOST';
+            const infToggle = document.createElement('div');
+            infToggle.className = 'toggle' + (localInfiniteBoostFlags[i] ? ' on' : '');
+            infToggle.innerHTML = '<div class="knob"></div>';
+            infToggle.addEventListener('click', () => { localInfiniteBoostFlags[i] = !localInfiniteBoostFlags[i]; renderLocalControls(); });
+            infRow.appendChild(infLabel); infRow.appendChild(infToggle);
+            block.appendChild(infRow);
+          }
 
           if (localBotFlags[i]) {
             const diffWrap = document.createElement('div'); diffWrap.className = 'segmented';
@@ -3729,8 +3819,14 @@
       });
       window.addEventListener('keydown', (e) => {
         const key = e.key.toLowerCase();
-        if (key === 'r' && $('screen-game').style.display !== 'none' && activeMatch && !hostConn) {
-          activeMatch.resetMatch();
+        if (key === 'r' && $('screen-game').style.display !== 'none' && activeMatch && activeMatch.phase === 'matchover') {
+          if (!hostConn) {
+            activeMatch.resetMatch();
+          } else if (hostState) {
+            if (activeMatch) { activeMatch.stop(); activeMatch = null; }
+            closeReplay();
+            hostStartMatch();
+          }
         }
         if (key === 'd' && $('screen-game').style.display !== 'none' && activeMatch && activeMatch.phase === 'matchover' && !hostConn) {
           downloadReplay();
