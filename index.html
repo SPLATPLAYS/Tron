@@ -3002,6 +3002,14 @@
             const pid = slot ? slot.playerId : null;
             handleHostMessage(pid, data);
           });
+          conn.on('close', () => {
+            const slot = hostState.connections && hostState.connections[conn.peer];
+            if (slot && slot.playerId) handleGuestDisconnect(slot.playerId);
+          });
+          conn.on('error', () => {
+            const slot = hostState.connections && hostState.connections[conn.peer];
+            if (slot && slot.playerId) handleGuestDisconnect(slot.playerId);
+          });
         });
       }
       function handleHostMessage(pid, data) {
@@ -3076,7 +3084,9 @@
         }
         const r = hostState.roster.find(r => r.id === pid);
         if (!r) return;
-        addSystemChat(r.name + ' left the game');
+        const isKick = hostState._kickingPlayer === pid;
+        if (hostState._kickingPlayer === pid) delete hostState._kickingPlayer;
+        addSystemChat(isKick ? ('Kicked ' + r.name) : (r.name + ' left the game'));
         hostState.roster = hostState.roster.filter(r => r.id !== pid);
         for (const k of Object.keys(hostState.connections)) {
           if (hostState.connections[k].playerId === pid) { delete hostState.connections[k]; break; }
@@ -3130,21 +3140,11 @@
         for (const k of Object.keys(hostState.connections)) {
           if (hostState.connections[k].playerId === id) {
             try { hostState.connections[k].conn.send({ type: 'kicked' }); } catch(e) {}
+            hostState._kickingPlayer = id;
             hostState.connections[k].conn.close();
-            delete hostState.connections[k];
-            break;
+            return;
           }
         }
-        hostState.roster = hostState.roster.filter(r => r.id !== id);
-        delete hostState.remoteSlots[id];
-        if (hostState._mutedPlayers) hostState._mutedPlayers.delete(id);
-        if (activeMatch && activeMatch.phase === 'playing') {
-          const sp = activeMatch.sim.players.find(p => p.id === id);
-          if (sp) sp.alive = false;
-        }
-        addSystemChat('Kicked ' + r.name);
-        broadcastLobby();
-        renderLobbyHost();
       }
       function hostRemoveBot(id) {
         if (!hostState) return;
