@@ -3148,6 +3148,7 @@
             try { hostState.connections[k].conn.send({ type: 'kicked' }); } catch(e) {}
             hostState._kickingPlayer = id;
             hostState.connections[k].conn.close();
+            handleGuestDisconnect(id);
             return;
           }
         }
