@@ -1390,7 +1390,29 @@
       <button class="btn ghost" id="btnPublicRooms" style="margin-top:-8px;">Browse Public Rooms</button>
       <button class="btn ghost" id="btnStats" style="margin-top:-4px;">Career Stats</button>
       <button class="btn ghost" id="btnLoadReplay" style="margin-top:-4px;">Load Replay</button>
+      <button class="btn ghost" id="btnSettings" style="margin-top:-4px;">Settings</button>
       <input type="file" id="replayFileInput" accept=".json" style="display:none;">
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="screen" id="screen-settings" style="display:none;">
+      <div class="panel">
+        <h2>SETTINGS</h2>
+        <div class="field">
+          <div class="toggle-row">
+            <div>
+              <div class="field-label">Record Replays</div>
+              <div style="font-size:11px;color:var(--text-dim);margin-top:4px;line-height:1.5;">Stores every frame of each match so you can download a replay at game end. Disabled by default to avoid the end-of-match hiccup on slower machines.</div>
+            </div>
+            <div class="toggle" id="settingsReplayToggle">
+              <div class="knob"></div>
+            </div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn ghost" id="settingsBack">&larr; Back</button>
+        </div>
+      </div>
     </div>
 
     <!-- LOCAL SETUP -->
@@ -2645,15 +2667,18 @@
             stopReplayRecording();
             const text = matchWinner ? (matchWinner.name.toUpperCase() + ' WINS') : ('TEAM ' + matchWinnerTeam + ' WINS');
             const color = matchWinner ? matchWinner.color : this.roster.find(r => r.team === matchWinnerTeam).color;
-            const hint = this.onBroadcast ? 'press R to restart \u00b7 press D to download replay' : 'press R to play again \u00b7 press D to download replay';
+            const canDl = replayRecordingEnabled() && replayFrames.length > 0;
+            const hint = this.onBroadcast
+              ? (canDl ? 'press R to restart \u00b7 press D to download replay' : 'press R to restart')
+              : (canDl ? 'press R to play again \u00b7 press D to download replay' : 'press R to play again');
             setOverlayText(text, 'match complete', hint, color);
-            $('overlayDownloadBtn').style.display = 'inline-block';
+            $('overlayDownloadBtn').style.display = canDl ? 'inline-block' : 'none';
             msg.phase = 'matchover';
             msg.matchWinnerName = matchWinner ? matchWinner.name : null;
             msg.matchWinnerColor = color;
             msg.matchWinnerTeam = matchWinnerTeam;
             recordMatchWinners(this.roster, this.score, this.settings);
-            if (this.onBroadcast) {
+            if (this.onBroadcast && replayRecordingEnabled() && replayFrames.length > 0) {
               msg.replayAvailable = true;
               msg.replayFrames = replayFrames;
               msg.replaySettings = this.settings;
@@ -3835,7 +3860,7 @@
             hostStartMatch();
           }
         }
-        if (key === 'd' && $('screen-game').style.display !== 'none' && activeMatch && activeMatch.phase === 'matchover' && !hostConn) {
+        if (key === 'd' && $('screen-game').style.display !== 'none' && activeMatch && activeMatch.phase === 'matchover' && !hostConn && replayRecordingEnabled() && replayFrames.length > 0) {
           downloadReplay();
         }
       });
@@ -3859,6 +3884,31 @@
       // INLINED from features.js -- all in IIFE scope
       // ===================================================================
       const STATS_KEY = 'tron-career-stats-v1';
+
+      // ---- SETTINGS ----
+      const SETTINGS_KEY = 'tron-settings-v1';
+      let settings = (() => {
+        try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch (e) { return {}; }
+      })();
+      // Replays are OFF by default -- recording every tick and serialising the
+      // full frame list at game end causes a noticeable hitch on slower devices.
+      if (typeof settings.recordReplays !== 'boolean') settings.recordReplays = false;
+      function saveSettings() {
+        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { }
+      }
+      function refreshSettingsUI() {
+        const t = $('settingsReplayToggle');
+        t.classList.toggle('on', !!settings.recordReplays);
+      }
+      function replayRecordingEnabled() { return !!settings.recordReplays; }
+
+      $('btnSettings').addEventListener('click', () => { refreshSettingsUI(); switchScreen('settings'); });
+      $('settingsBack').addEventListener('click', () => switchScreen('menu'));
+      $('settingsReplayToggle').addEventListener('click', () => {
+        settings.recordReplays = !settings.recordReplays;
+        saveSettings();
+        refreshSettingsUI();
+      });
 
       function loadStats() {
         try { return JSON.parse(localStorage.getItem(STATS_KEY)) || { players: {} }; } catch (e) { return { players: {} }; }
@@ -3908,6 +3958,7 @@
       let replayTimer = null;
 
       function startReplayRecording() {
+        if (!replayRecordingEnabled()) { replayFrames = []; replayActive = false; return; }
         replayFrames = [];
         replayActive = true;
       }
